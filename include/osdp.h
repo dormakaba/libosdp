@@ -786,6 +786,17 @@ struct osdp_event_file {
 	enum osdp_event_file_status_e status;
 };
 
+/*
+ * @brief OSDP Event NAK
+ *
+ * The event is raised for a NAK. 
+ *
+ * @param: pd_nak_code contains the respective osdp_pd_nak_code_e.
+ */
+struct osdp_event_nak {
+	uint8_t pd_nak_code;
+};
+
 /**
  * @brief OSDP PD Events
  */
@@ -795,6 +806,7 @@ enum osdp_event_type {
 	OSDP_EVENT_MFGREP,        /**< Manufacturer specific reply event */
 	OSDP_EVENT_STATUS,        /**< Status event */
 	OSDP_EVENT_FILE,          /**< File event */
+	OSDP_EVENT_NAK,           /**< NAK event */
 	OSDP_EVENT_SENTINEL       /**< Max event value */
 };
 
@@ -814,6 +826,7 @@ struct osdp_event {
 		struct osdp_event_mfgrep mfgrep;     /**< Manufacturer spefific response event struture */
 		struct osdp_status_report status;    /**< Status report event strcture */
 		struct osdp_event_file file;         /**< File event structure */
+		struct osdp_event_nak nak;           /**< NAK event structure */
 	};
 };
 

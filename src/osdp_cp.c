@@ -421,6 +421,10 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		}
 		LOG_WRN("PD replied with NAK(%d) for CMD(%02x)",
 			buf[pos], pd->cmd_id);
+		event.type = OSDP_EVENT_NAK;
+		event.nak.pd_nak_code = buf[pos]; 
+		memcpy(pd->ephemeral_data, &event, sizeof(event));
+		make_request(pd, CP_REQ_EVENT_SEND);
 		ret = OSDP_CP_ERR_NONE;
 		break;
 	case REPLY_PDID:

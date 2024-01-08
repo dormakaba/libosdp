@@ -101,8 +101,8 @@ int osdp_file_cmd_stat_decode(struct osdp_pd *pd, uint8_t *buf, int len)
 			len, sizeof(struct osdp_cmd_file_stat));
 		return -1;
 	}
-
-	if (p->status == 0) {
+	// status==OSDP_FILE_STATUS_PD_FINISHING must be handled properly
+	if (p->status >= 0) {
 		f->offset += f->length;
 		f->errors = 0;
 	} else {

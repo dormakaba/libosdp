@@ -1175,6 +1175,9 @@ void osdp_pd_teardown(osdp_t *ctx)
 	}
 
 #ifndef CONFIG_OSDP_STATIC_PD
+	for (int pd = 0; pd < NUM_PD(ctx); pd++) {
+		safe_free(osdp_to_pd(ctx, pd)->file);
+	}
 	safe_free(pd);
 	safe_free(ctx);
 #endif

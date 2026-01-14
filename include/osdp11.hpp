@@ -82,7 +82,7 @@ public:
     virtual bool setup(int num_pd, osdp_pd_info_t* info) = 0;
     virtual void refresh() = 0;
     virtual void teardown() = 0;
-    virtual int send_command(int pd, struct osdp_cmd* cmd) = 0;
+    virtual int submit_command(int pd, struct osdp_cmd* cmd) = 0;
     virtual void set_event_callback(cp_event_callback_t cb, void* arg) = 0;
     virtual int get_pd_id(int pd, struct osdp_pd_id* id) = 0;
     virtual int get_capability(int pd, struct osdp_pd_cap* cap) = 0;
@@ -114,10 +114,10 @@ public:
 		}
 	}
 
-	int send_command(int pd, struct osdp_cmd *cmd)
+	int submit_command(int pd, struct osdp_cmd *cmd)
 	{
 		if (_ctx) {
-			return osdp_cp_send_command(_ctx, pd, cmd);
+			return osdp_cp_submit_command(_ctx, pd, cmd);
 		}
 		return -1;
 	}
@@ -167,7 +167,7 @@ public:
     virtual void refresh() = 0;
     virtual void teardown() = 0;
     virtual void set_command_callback(pd_command_callback_t cb, void* arg) = 0;
-    virtual int notify_event(struct osdp_event* event) = 0;
+	virtual int submit_event(struct osdp_event* event) = 0;
 };
 
 class PeripheralDevice : public Common, public IPeripheralDevice {
@@ -207,9 +207,9 @@ public:
 		osdp_pd_set_command_callback(_ctx, cb, arg);
 	}
 
-	int notify_event(struct osdp_event *event)
+	int submit_event(struct osdp_event *event)
 	{
-		return osdp_pd_notify_event(_ctx, event);
+		return osdp_pd_submit_event(_ctx, event);
 	}
 
 	int flush_events()

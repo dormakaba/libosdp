@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -101,6 +101,7 @@ int pyosdp_parse_bool(PyObject *obj, bool *res)
 	return 0;
 }
 
+/* NOTE: Caller must free the returned string with free() */
 int pyosdp_parse_str(PyObject *obj, char **str)
 {
 	char *s;
@@ -119,11 +120,16 @@ int pyosdp_parse_str(PyObject *obj, char **str)
 		return -1;
 	}
 	*str = strdup(s);
+	if (*str == NULL) {
+		PyErr_SetString(PyExc_MemoryError, "String allocation failed");
+		Py_DECREF(str_ref);
+		return -1;
+	}
 	Py_DECREF(str_ref);
 	return 0;
 }
 
-int pyosdp_parse_bytes(PyObject *obj, uint8_t **data, int *length)
+int pyosdp_parse_bytes(PyObject *obj, uint8_t **data, int *length, bool allow_empty)
 {
 	Py_ssize_t len;
 	uint8_t *buf;
@@ -131,7 +137,7 @@ int pyosdp_parse_bytes(PyObject *obj, uint8_t **data, int *length)
 	if (!obj || !PyArg_Parse(obj, "y#", &buf, &len))
 		return -1;
 
-	if (buf == NULL || len == 0) {
+	if (buf == NULL || (!allow_empty && len == 0)) {
 		PyErr_Format(PyExc_ValueError, "Unable to extact data bytes");
 		return -1;
 	}
@@ -211,7 +217,27 @@ int pyosdp_dict_get_bytes(PyObject *dict, const char *key, uint8_t **data,
 		return -1;
 	}
 
-	return pyosdp_parse_bytes(obj, data, length);
+	return pyosdp_parse_bytes(obj, data, length, false);
+}
+
+int pyosdp_dict_get_bytes_allow_empty(PyObject *dict, const char *key, uint8_t **data,
+			  int *length)
+{
+	PyObject *obj;
+
+	if (!PyDict_Check(dict)) {
+		PyErr_SetString(PyExc_TypeError, "arg is not a dict");
+		return -1;
+	}
+
+	obj = PyDict_GetItemString(dict, key);
+	if (obj == NULL) {
+		PyErr_Format(PyExc_KeyError,
+			     "Key: '%s' of type: bytes expected", key);
+		return -1;
+	}
+
+	return pyosdp_parse_bytes(obj, data, length, true);
 }
 
 int pyosdp_dict_get_object(PyObject *dict, const char *key, PyObject **obj)
@@ -263,10 +289,14 @@ static int channel_write_callback(void *data, uint8_t *buf, int len)
 		return -1;
 
 	PyObject *result = PyObject_CallMethod(channel, "write", "O", byte_array);
-	if (!result || !PyLong_Check(result))
+	if (!result || !PyLong_Check(result)) {
+		Py_DECREF(byte_array);
+		Py_XDECREF(result);
 		return -1;
+	}
 
 	len = (int)PyLong_AsLong(result);
+	Py_DECREF(byte_array);
 	Py_DECREF(result);
 	return len;
 }
@@ -274,8 +304,10 @@ static int channel_write_callback(void *data, uint8_t *buf, int len)
 static void channel_flush_callback(void *data)
 {
 	PyObject *channel = data;
+	PyObject *result;
 
-	PyObject_CallMethod(channel, "flush", NULL);
+	result = PyObject_CallMethod(channel, "flush", NULL);
+	Py_XDECREF(result);
 }
 
 void pyosdp_get_channel(PyObject *channel, struct osdp_channel *ops)

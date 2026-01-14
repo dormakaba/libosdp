@@ -124,8 +124,10 @@ of the protocol support only the most common among them. You can see a
 
    api/control-panel
    api/peripheral-device
+   api/pd-info
    api/miscellaneous
    api/command-structure
+   api/event-structure
    api/channel
 
 .. toctree::

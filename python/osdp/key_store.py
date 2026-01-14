@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -28,11 +28,8 @@ class KeyStore():
             key.append(random.randint(0, 255))
         return bytes(key)
 
-    def store_key(self, name):
-        if name not in self.keys:
-            raise RuntimeError
-        key = self.keys[name]
-        with open(self.key_file(name), "w") as f:
+    def _store_key(self, key):
+        with open(self.key_file(key), "w") as f:
             f.write(key.hex())
 
     def get_key(self, name):
@@ -45,6 +42,11 @@ class KeyStore():
             raise RuntimeError
         self.keys[name] = self.gen_key(key_len)
         return self.keys[name]
+
+    def commit_key(self, name):
+        if name not in self.keys:
+            raise RuntimeError
+        self._store_key(self.keys[name])
 
     def update_key(self, name, key):
         if name not in self.keys:

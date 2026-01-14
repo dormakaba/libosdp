@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -40,16 +40,16 @@ static PyObject *pyosdp_pd_is_sc_active(pyosdp_pd_t *self, PyObject *args)
 		Py_RETURN_FALSE;
 }
 
-#define pyosdp_pd_notify_event_doc                                               \
+#define pyosdp_pd_submit_event_doc                                               \
 	"Notify the CP of an OSDP event\n"                                       \
 	"\n"                                                                     \
 	"@param event A dict of event keys and values. See osdp.h for details\n" \
 	"\n"                                                                     \
 	"@return None\n"
-static PyObject *pyosdp_pd_notify_event(pyosdp_pd_t *self, PyObject *args)
+static PyObject *pyosdp_pd_submit_event(pyosdp_pd_t *self, PyObject *args)
 {
 	PyObject *event_dict;
-	struct osdp_event event;
+	struct osdp_event event = {};
 
 	if (!PyArg_ParseTuple(args, "O", &event_dict)) {
 		PyErr_SetString(PyExc_TypeError, "Failed to parse event dict!");
@@ -61,7 +61,7 @@ static PyObject *pyosdp_pd_notify_event(pyosdp_pd_t *self, PyObject *args)
 		return NULL;
 	}
 
-	if (osdp_pd_notify_event(self->ctx, &event)) {
+	if (osdp_pd_submit_event(self->ctx, &event)) {
 		Py_RETURN_FALSE;
 	}
 
@@ -124,6 +124,7 @@ static PyObject *pyosdp_pd_set_command_callback(pyosdp_pd_t *self, PyObject *arg
 		return NULL;
 	}
 
+	Py_XDECREF(self->command_cb); /* release previous callback if any */
 	self->command_cb = callable;
 	Py_INCREF(self->command_cb);
 	osdp_pd_set_command_callback(self->ctx, pd_command_cb, (void *)self);
@@ -165,6 +166,9 @@ static void pyosdp_pd_tp_dealloc(pyosdp_pd_t *self)
 {
 	if (self->ctx)
 		osdp_pd_teardown(self->ctx);
+
+	/* Free allocated name string */
+	free(self->name);
 
 	/* call base class destructor */
 	OSDPBaseType.tp_dealloc((PyObject *)self);
@@ -247,8 +251,10 @@ static int pyosdp_pd_tp_init(pyosdp_pd_t *self, PyObject *args, PyObject *kwargs
 					 &py_pd_cap_list))
 		goto error;
 
-	pyosdp_dict_get_str(py_info, "name", &self->name);
-	info.name = self->name;
+	if (pyosdp_dict_get_str(py_info, "name", &self->name) == 0)
+		info.name = self->name;
+	else
+		info.name = NULL;
 
 	if (py_pd_cap_list && pyosdp_add_pd_cap(py_pd_cap_list, &info))
 		goto error;
@@ -308,15 +314,14 @@ PyObject *pyosdp_pd_tp_repr(PyObject *self)
 {
 	PyObject *py_string;
 
-	py_string = Py_BuildValue("s", "control panel object");
-	Py_INCREF(py_string);
+	py_string = Py_BuildValue("s", "peripheral device object");
 
 	return py_string;
 }
 
 static int pyosdp_pd_tp_traverse(pyosdp_pd_t *self, visitproc visit, void *arg)
 {
-	Py_VISIT(self->ctx);
+	Py_VISIT(self->command_cb);
 	return 0;
 }
 
@@ -334,14 +339,14 @@ static PyMethodDef pyosdp_pd_tp_methods[] = {
 	  METH_NOARGS, pyosdp_pd_refresh_doc },
 	{ "set_command_callback", (PyCFunction)pyosdp_pd_set_command_callback,
 	  METH_VARARGS, pyosdp_pd_set_command_callback_doc },
-	{ "notify_event", (PyCFunction)pyosdp_pd_notify_event,
-	  METH_VARARGS, pyosdp_pd_notify_event_doc },
+	{ "submit_event", (PyCFunction)pyosdp_pd_submit_event,
+	  METH_VARARGS, pyosdp_pd_submit_event_doc },
 	{ "is_sc_active", (PyCFunction)pyosdp_pd_is_sc_active,
 	  METH_NOARGS, pyosdp_pd_is_sc_active_doc },
 	{ "is_online", (PyCFunction)pyosdp_pd_is_online,
 	  METH_NOARGS, pyosdp_pd_is_online_doc },
 	{ "flush_events", (PyCFunction)pyosdp_pd_flush_events,
-	  METH_VARARGS, pyosdp_pd_flush_events_doc },
+	  METH_NOARGS, pyosdp_pd_flush_events_doc },
 	{ NULL, NULL, 0, NULL } /* Sentinel */
 };
 

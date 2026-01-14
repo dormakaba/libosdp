@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2019-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2019-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "osdp_common.h"
-#include "osdp_pcap.h"
+#include "osdp_diag.h"
 
 #define OSDP_PKT_MARK                  0xFF
 #define OSDP_PKT_SOM                   0x53
@@ -79,7 +79,7 @@ static int osdp_channel_receive(struct osdp_pd *pd)
 	return total_recv;
 }
 
-uint8_t osdp_compute_checksum(uint8_t *msg, int length)
+static uint8_t osdp_compute_checksum(uint8_t *msg, int length)
 {
 	uint8_t checksum = 0;
 	int i, whole_checksum;
@@ -92,16 +92,28 @@ uint8_t osdp_compute_checksum(uint8_t *msg, int length)
 	return checksum;
 }
 
-static int osdp_phy_get_seq_number(struct osdp_pd *pd, int do_inc)
+static inline int phy_get_next_seq_number(struct osdp_pd *pd)
 {
-	/* pd->seq_num is set to -1 to reset phy cmd state */
-	if (do_inc) {
-		pd->seq_number += 1;
-		if (pd->seq_number > 3) {
-			pd->seq_number = 1;
-		}
+	int next_seq = pd->seq_number;
+
+	next_seq += 1;
+	if (next_seq > 3) {
+		next_seq = 1;
 	}
-	return pd->seq_number & PKT_CONTROL_SQN;
+	return next_seq;
+}
+
+static inline void phy_rollback_seq_number(struct osdp_pd *pd)
+{
+	pd->seq_number -= 1;
+	if (pd->seq_number < 1) { /* rollback to zero is not supported */
+		pd->seq_number = 3;
+	}
+}
+
+static inline void phy_reset_seq_number(struct osdp_pd *pd)
+{
+	pd->seq_number = -1;
 }
 
 int osdp_phy_packet_get_data_offset(struct osdp_pd *pd, const uint8_t *buf)
@@ -140,18 +152,17 @@ int osdp_phy_in_sc_handshake(int is_reply, int id)
 
 int osdp_phy_packet_init(struct osdp_pd *pd, uint8_t *buf, int max_len)
 {
-	int exp_len, id, scb_len = 0;
+	int id, scb_len = 0;
 	struct osdp_packet_header *pkt;
 
-	exp_len = sizeof(struct osdp_packet_header) + 64; /* 64 is estimated */
-	if (max_len < exp_len) {
-		LOG_ERR("packet_init: out of space! CMD: %02x", pd->cmd_id);
+	if (max_len < OSDP_MINIMUM_PACKET_SIZE) {
+		LOG_ERR("packet_init: packet size too small");
 		return OSDP_ERR_PKT_FMT;
 	}
 
 	/**
 	 * In PD mode just follow what we received from CP. In CP mode, as we
-	 * initiate the transaction, choose based on CONFIG_OSDP_SKIP_MARK_BYTE.
+	 * initiate the transaction, choose based on OPT_OSDP_SKIP_MARK_BYTE.
 	 */
 	if ((is_pd_mode(pd) && packet_has_mark(pd)) ||
 	    (is_cp_mode(pd) && !ISSET_FLAG(pd, PD_FLAG_PKT_SKIP_MARK))) {
@@ -164,19 +175,22 @@ int osdp_phy_packet_init(struct osdp_pd *pd, uint8_t *buf, int max_len)
 	pkt = (struct osdp_packet_header *)buf;
 	pkt->som = OSDP_PKT_SOM;
 	pkt->pd_address = pd->address & 0x7F;	/* Use only the lower 7 bits */
+	if (ISSET_FLAG(pd, PD_FLAG_PKT_BROADCAST)) {
+		pkt->pd_address = 0x7F;
+		CLEAR_FLAG(pd, PD_FLAG_PKT_BROADCAST);
+	}
+	/* PD must reply with MSB of it's address set */
 	if (is_pd_mode(pd)) {
-		/* PD must reply with MSB of it's address set */
-		if (ISSET_FLAG(pd, PD_FLAG_PKT_BROADCAST)) {
-			pkt->pd_address = 0x7F; /* made 0xFF below */
-			CLEAR_FLAG(pd, PD_FLAG_PKT_BROADCAST);
-		}
 		pkt->pd_address |= 0x80;
 		id = pd->reply_id;
 	} else {
 		id = pd->cmd_id;
 	}
-	pkt->control = osdp_phy_get_seq_number(pd, is_cp_mode(pd));
-	pkt->control |= PKT_CONTROL_CRC;
+	pkt->control = phy_get_next_seq_number(pd);
+	if (is_pd_mode(pd) ||
+	    (is_cp_mode(pd) && ISSET_FLAG(pd, PD_FLAG_CP_USE_CRC))) {
+		pkt->control |= PKT_CONTROL_CRC;
+	}
 
 	if (sc_is_active(pd)) {
 		pkt->control |= PKT_CONTROL_SCB;
@@ -192,13 +206,13 @@ int osdp_phy_packet_init(struct osdp_pd *pd, uint8_t *buf, int max_len)
 	        sizeof(struct osdp_packet_header) + scb_len);
 }
 
-static int osdp_phy_packet_finalize(struct osdp_pd *pd, uint8_t *buf,
-				    int len, int max_len)
+static int phy_packet_finalize(struct osdp_pd *pd, uint8_t *buf,
+			       int len, int max_len)
 {
 	uint16_t crc16;
 	struct osdp_packet_header *pkt;
 	uint8_t *data;
-	int data_len;
+	int data_len, checksum_len;
 
 	/* Do a sanity check only; we expect header to be pre-filled */
 	if ((unsigned long)len <= sizeof(struct osdp_packet_header)) {
@@ -224,11 +238,12 @@ static int osdp_phy_packet_finalize(struct osdp_pd *pd, uint8_t *buf,
 		return OSDP_ERR_PKT_FMT;
 	}
 
-	/* len: with 2 byte CRC */
-	pkt->len_lsb = BYTE_0(len + 2);
-	pkt->len_msb = BYTE_1(len + 2);
+	/* len: with CRC (2 bytes) or checksum (1 byte) */
+	checksum_len = (pkt->control & PKT_CONTROL_CRC) ? 2 : 1;
+	pkt->len_lsb = BYTE_0(len + checksum_len);
+	pkt->len_msb = BYTE_1(len + checksum_len);
 
-	if (IS_ENABLED(CONFIG_OSDP_DATA_TRACE)) {
+	if (is_data_trace_enabled(pd)) {
 		uint8_t control;
 
 		/**
@@ -251,7 +266,7 @@ static int osdp_phy_packet_finalize(struct osdp_pd *pd, uint8_t *buf,
 		if (pkt->data[1] == SCS_17 || pkt->data[1] == SCS_18) {
 			/**
 			 * Only the data portion of message (after id byte)
-			 * is encrypted. While (en/de)crypting, we must skip
+			 * is encrypted. While (en)decrypting, we must skip
 			 * header, security block, and cmd/reply ID byte.
 			 *
 			 * Note: if cmd/reply has no data, we must set type to
@@ -272,14 +287,15 @@ static int osdp_phy_packet_finalize(struct osdp_pd *pd, uint8_t *buf,
 			}
 			len += osdp_encrypt_data(pd, is_cp_mode(pd), data, data_len);
 		}
-		/* len: with 4bytes MAC; with 2 byte CRC; without 1 byte mark */
+		/* len: with 4bytes MAC; with CRC (2 bytes) or checksum (1 byte); without 1 byte mark */
 		if (len + 4 > max_len) {
 			goto out_of_space_error;
 		}
 
-		/* len: with 2 byte CRC; with 4 byte MAC */
-		pkt->len_lsb = BYTE_0(len + 2 + 4);
-		pkt->len_msb = BYTE_1(len + 2 + 4);
+		/* len: with CRC/checksum; with 4 byte MAC */
+		checksum_len = (pkt->control & PKT_CONTROL_CRC) ? 2 : 1;
+		pkt->len_lsb = BYTE_0(len + checksum_len + 4);
+		pkt->len_msb = BYTE_1(len + checksum_len + 4);
 
 		/* compute and extend the buf with 4 MAC bytes */
 		osdp_compute_mac(pd, is_cp_mode(pd), buf, len);
@@ -288,14 +304,20 @@ static int osdp_phy_packet_finalize(struct osdp_pd *pd, uint8_t *buf,
 		len += 4;
 	}
 
-	/* fill crc16 */
-	if (len + 2 > max_len) {
-		goto out_of_space_error;
+	/* fill crc16 or checksum */
+	if (pkt->control & PKT_CONTROL_CRC) {
+		if (len + 2 > max_len) {
+			goto out_of_space_error;
+		}
+		crc16 = osdp_compute_crc16(buf, len);
+		bwrite_u16_le(crc16, buf, &len);
+	} else {
+		if (len + 1 > max_len) {
+			goto out_of_space_error;
+		}
+		buf[len] = osdp_compute_checksum(buf, len);
+		len += 1;
 	}
-	crc16 = osdp_compute_crc16(buf, len);
-	buf[len + 0] = BYTE_0(crc16);
-	buf[len + 1] = BYTE_1(crc16);
-	len += 2;
 
 	return len + packet_has_mark(pd);
 
@@ -310,12 +332,12 @@ int osdp_phy_send_packet(struct osdp_pd *pd, uint8_t *buf,
 	int ret;
 
 	/* finalize packet */
-	len = osdp_phy_packet_finalize(pd, buf, len, max_len);
+	len = phy_packet_finalize(pd, buf, len, max_len);
 	if (len < 0) {
 		return OSDP_ERR_PKT_BUILD;
 	}
 
-	if (IS_ENABLED(CONFIG_OSDP_PACKET_TRACE)) {
+	if (is_packet_trace_enabled(pd)) {
 		osdp_capture_packet(pd, buf, len);
 	}
 
@@ -329,9 +351,41 @@ int osdp_phy_send_packet(struct osdp_pd *pd, uint8_t *buf,
 	return OSDP_ERR_PKT_NONE;
 }
 
+static bool phy_rescan_packet_buf(struct osdp_pd *pd)
+{
+	unsigned long j = packet_has_mark(pd);
+	unsigned long i = j + 1; /* +1 to skip current SoM */
+
+	while (i < pd->packet_buf_len && pd->packet_buf[i] != OSDP_PKT_SOM) {
+		i++;
+	}
+
+	if (i < pd->packet_buf_len) {
+		/* found another SoM; move the rest of the bytes down */
+		if (i && pd->packet_buf[i - 1] == OSDP_PKT_MARK) {
+			pd->packet_buf[0] = OSDP_PKT_MARK;
+			j = 1;
+			SET_FLAG(pd, PD_FLAG_PKT_HAS_MARK);
+		} else {
+			j = 0;
+			CLEAR_FLAG(pd, PD_FLAG_PKT_HAS_MARK);
+		}
+		while (i < pd->packet_buf_len) {
+			pd->packet_buf[j++] = pd->packet_buf[i++];
+		}
+		pd->packet_buf_len = j;
+		return true;
+	}
+
+	/* nothing found, discarded all */
+	pd->packet_buf_len = 0;
+	return false;
+}
+
 static int phy_check_header(struct osdp_pd *pd)
 {
-	int pkt_len, len, target_len;
+	unsigned long pkt_len;
+	int len;
 	struct osdp_packet_header *pkt;
 	uint8_t cur_byte = 0, prev_byte = 0;
 	uint8_t *buf = pd->packet_buf;
@@ -346,7 +400,6 @@ static int phy_check_header(struct osdp_pd *pd)
 				buf[0] = OSDP_PKT_MARK;
 				buf[1] = OSDP_PKT_SOM;
 				pd->packet_buf_len = 2;
-				pd->packet_scan_skip--;
 				SET_FLAG(pd, PD_FLAG_PKT_HAS_MARK);
 			} else {
 				buf[0] = OSDP_PKT_SOM;
@@ -354,18 +407,18 @@ static int phy_check_header(struct osdp_pd *pd)
 				CLEAR_FLAG(pd, PD_FLAG_PKT_HAS_MARK);
 			}
 			break;
-		} else {
+		}
+		if (cur_byte != OSDP_PKT_MARK) {
 			pd->packet_scan_skip++;
 		}
 		prev_byte = cur_byte;
 	}
 
 	/* Found start of a new packet; wait until we have atleast the header */
-	target_len = sizeof(struct osdp_packet_header);
 	len = osdp_rb_pop_buf(&pd->rx_rb, buf + pd->packet_buf_len,
-			      target_len - pd->packet_buf_len);
+			      sizeof(struct osdp_packet_header) - 1);
 	pd->packet_buf_len += len;
-	if (pd->packet_buf_len < target_len) {
+	if (pd->packet_buf_len < sizeof(struct osdp_packet_header)) {
 		return OSDP_ERR_PKT_WAIT;
 	}
 
@@ -377,18 +430,23 @@ static int phy_check_header(struct osdp_pd *pd)
 		return OSDP_ERR_PKT_FMT;
 	}
 
-	if ((is_cp_mode(pd) && !(pkt->pd_address & 0x80)) ||
-	    (is_pd_mode(pd) &&  (pkt->pd_address & 0x80))) {
-		LOG_WRN("Ignoring packet with invalid PD_ADDR.MSB");
-		return OSDP_ERR_PKT_SKIP;
-	}
-
-	/* validate packet length */
+	/* validate packet */
 	pkt_len = (pkt->len_msb << 8) | pkt->len_lsb;
-
 	if (pkt_len > OSDP_PACKET_BUF_SIZE ||
-	    (unsigned long)pkt_len < sizeof(struct osdp_packet_header) + 1) {
-		return OSDP_ERR_PKT_FMT;
+	    pkt_len < sizeof(struct osdp_packet_header) + 1 ||
+	    (is_cp_mode(pd) && !(pkt->pd_address & 0x80)) ||
+	    (is_pd_mode(pd) &&  (pkt->pd_address & 0x80))) {
+		/*
+		 * Since SoM byte was encountered and the packet structure is
+		 * invalid, we cannot just discard all bytes extracted so far
+		 * as there may another valid SoM in the subsequent stream. So
+		 * we need to re-scan rest of the extracted bytes for another
+		 * SoM before we can discard the extracted bytes.
+		 */
+		if (phy_rescan_packet_buf(pd)) {
+			LOG_DBG("Found nested SoM in re-scan; re-parsing");
+		}
+		return OSDP_ERR_PKT_WAIT;
 	}
 
 	return pkt_len + packet_has_mark(pd);
@@ -448,7 +506,7 @@ static int phy_check_packet(struct osdp_pd *pd, uint8_t *buf, int pkt_len)
 			 * phy_get_seq_number()) and invalidate any established
 			 * secure channels.
 			 */
-			pd->seq_number = -1;
+			phy_reset_seq_number(pd);
 			sc_deactivate(pd);
 		}
 		else if (comp == pd->seq_number) {
@@ -459,7 +517,7 @@ static int phy_check_packet(struct osdp_pd *pd, uint8_t *buf, int pkt_len)
 			 * set to -1) and then process the packet all over again
 			 * as if it was the first time we are seeing it.
 			 */
-			pd->seq_number -= 1;
+			phy_rollback_seq_number(pd);
 			LOG_INF("Received a sequence repeat packet!");
 		}
 		/**
@@ -484,9 +542,9 @@ static int phy_check_packet(struct osdp_pd *pd, uint8_t *buf, int pkt_len)
 			}
 		}
 	}
-	cur = osdp_phy_get_seq_number(pd, is_pd_mode(pd));
+	cur = phy_get_next_seq_number(pd);
 	if (cur != comp && !ISSET_FLAG(pd, PD_FLAG_SKIP_SEQ_CHECK)) {
-		LOG_ERR("Packet sequence mismatch expected: %d received: %d",
+		LOG_ERR("Packet sequence mismatch (expected: %d, got: %d)",
 			cur, comp);
 		pd->reply_id = REPLY_NAK;
 		pd->ephemeral_data[0] = OSDP_PD_NAK_SEQ_NUM;
@@ -518,8 +576,9 @@ int osdp_phy_check_packet(struct osdp_pd *pd)
 		}
 		pd->packet_len = ret;
 		if (pd->packet_scan_skip) {
-			LOG_WRN("Packet scan skipped %u bytes before SoM",
-				pd->packet_scan_skip);
+			LOG_DBG("Packet scan skipped:%u mark:%d",
+				pd->packet_scan_skip,
+				ISSET_FLAG(pd, PD_FLAG_PKT_HAS_MARK));
 			pd->packet_scan_skip = 0;
 		}
 	}
@@ -531,7 +590,7 @@ int osdp_phy_check_packet(struct osdp_pd *pd)
 	if (pd->packet_buf_len != pd->packet_len)
 		return OSDP_ERR_PKT_WAIT;
 
-	if (IS_ENABLED(CONFIG_OSDP_PACKET_TRACE)) {
+	if (is_packet_trace_enabled(pd)) {
 		osdp_capture_packet(pd, pd->packet_buf, pd->packet_buf_len);
 	}
 
@@ -581,30 +640,38 @@ int osdp_phy_decode_packet(struct osdp_pd *pd, uint8_t **pkt_start)
 			 * usage is limited to install mode (a provisioning time
 			 * mode) only.
 			 */
-			if (ISSET_FLAG(pd, OSDP_FLAG_INSTALL_MODE) &&
-			    pkt->data[2] == 0) {
+			if (is_install_mode(pd) && pkt->data[2] == 0) {
 				SET_FLAG(pd, PD_FLAG_SC_USE_SCBKD);
 			}
 		}
 		data = pkt->data + pkt->data[0];
 		len -= pkt->data[0]; /* consume security block */
 	} else {
-		/**
-		 * If the current packet is an ACK for a KEYSET, the PD might
-		 * have discarded the secure channel session keys in favour of
-		 * the new key we sent and hence this packet may reach us in
-		 * plain text. To work with such PDs, we must also discard our
-		 * secure session.
-		 *
-		 * For now, let's just pretend that SC is deactivated so the
-		 * rest of this method finishes normally. The actual secure
-		 * channel is actually discarded from the CP state machine.
-		 */
-		if (is_cp_mode(pd) && pd->cmd_id == CMD_KEYSET &&
-		    pkt->data[0] == REPLY_ACK) {
-			is_sc_active = false;
+		if (is_cp_mode(pd)) {
+			/**
+			 * If the current packet is an ACK for a KEYSET, the PD
+			 * might have discarded the secure channel session keys
+			 * in favour of the new key we sent and hence this packet
+			 * may reach us in plain text. To work with such PDs, we
+			 * must also discard our secure session.
+			 *
+			 * For now, let's just pretend that SC is deactivated so
+			 * the rest of this method finishes normally. The actual
+			 * secure channel is actually discarded from the CP
+			 * state machine.
+			 */
+			if (pd->cmd_id == CMD_KEYSET && pkt->data[0] == REPLY_ACK) {
+				is_sc_active = false;
+			}
+			/**
+			 * When the PD discards it's secure channel for some
+			 * reason, it responds with NACK(6) in plaintext. There
+			 * may be other cases too. So we will allow NAKs in
+			 */
+			if (is_sc_active && pkt->data[0] == REPLY_NAK) {
+				is_sc_active = false;
+			}
 		}
-
 		if (is_sc_active) {
 			LOG_ERR("Received plain-text message in SC");
 			pd->reply_id = REPLY_NAK;
@@ -632,7 +699,7 @@ int osdp_phy_decode_packet(struct osdp_pd *pd, uint8_t **pkt_start)
 		if (pkt->data[1] == SCS_17 || pkt->data[1] == SCS_18) {
 			/**
 			 * Only the data portion of message (after id byte)
-			 * is encrypted. While (en/de)crypting, we must skip
+			 * is encrypted. While (en)decrypting, we must skip
 			 * header (6), security block (2) and cmd/reply id (1)
 			 * bytes if cmd/reply has no data, use SCS_15/SCS_16.
 			 *
@@ -654,14 +721,14 @@ int osdp_phy_decode_packet(struct osdp_pd *pd, uint8_t **pkt_start)
 				 * used SCS_15/SCS_16 but we will be tolerant
 				 * towards those faulty implementations.
 				 */
-				LOG_INF("Received encrypted data block with 0 "
+				LOG_WRN_ONCE("Received encrypted data block with 0 "
 					"length; tolerating non-conformance!");
 			}
 			len += 1; /* put back cmd/reply ID */
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_OSDP_DATA_TRACE)) {
+	if (is_data_trace_enabled(pd)) {
 		int ret = len;
 
 		/**
@@ -705,14 +772,25 @@ void osdp_phy_state_reset(struct osdp_pd *pd, bool is_error)
 	pd->packet_len = 0;
 	pd->phy_state = 0;
 	if (is_error) {
-		pd->seq_number = -1;
+		pd->phy_retry_count = 0;
+		phy_reset_seq_number(pd);
 		if (pd->channel.flush) {
 			pd->channel.flush(pd->channel.data);
 		}
 	}
 }
 
+void osdp_phy_progress_sequence(struct osdp_pd *pd)
+{
+	pd->seq_number = phy_get_next_seq_number(pd);
+}
+
 #ifdef UNIT_TESTING
 int (*test_osdp_phy_packet_finalize)(struct osdp_pd *pd, uint8_t *buf,
-			int len, int max_len) = osdp_phy_packet_finalize;
+			int len, int max_len) = phy_packet_finalize;
+
+/* Export packet creation functions through function pointers for testing */
+int (*test_osdp_phy_packet_init)(struct osdp_pd *pd, uint8_t *buf, int max_len) = osdp_phy_packet_init;
+uint16_t (*test_osdp_compute_crc16)(const uint8_t *buf, size_t len) = osdp_compute_crc16;
+uint8_t (*test_osdp_compute_checksum)(uint8_t *msg, int length) = osdp_compute_checksum;
 #endif

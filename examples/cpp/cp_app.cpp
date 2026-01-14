@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2019-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2019-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <iostream>
-#include <unistd.h>
+#include <chrono>
+#include <thread>
 #include <osdp.hpp>
 
 int sample_cp_send_func(void *data, uint8_t *buf, int len)
@@ -13,7 +14,7 @@ int sample_cp_send_func(void *data, uint8_t *buf, int len)
 	(void)(data);
 	(void)(buf);
 
-	// Fill these
+	// TODO (user): send buf of len bytes, over the UART channel.
 
 	return len;
 }
@@ -24,7 +25,7 @@ int sample_cp_recv_func(void *data, uint8_t *buf, int len)
 	(void)(buf);
 	(void)(len);
 
-	// Fill these
+	// TODO (user): read from UART channel into buf, for upto len bytes.
 
 	return 0;
 }
@@ -42,11 +43,19 @@ osdp_pd_info_t pd_info[] = {
 			.id = 0,
 			.recv = sample_cp_recv_func,
 			.send = sample_cp_send_func,
-			.flush = nullptr
+			.flush = nullptr,
+			.close = nullptr,
 		},
 		.scbk = nullptr,
 	}
 };
+
+int event_handler(void *data, int pd, struct osdp_event *event) {
+	(void)(data);
+
+	std::cout << "PD" << pd << " EVENT: " << event->type << std::endl;
+	return 0;
+}
 
 int main()
 {
@@ -56,11 +65,13 @@ int main()
 
 	cp.setup(1, pd_info);
 
+	cp.set_event_callback(event_handler, nullptr);
+
 	while (1) {
 		// your application code.
 
 		cp.refresh();
-		usleep(1000);
+		std::this_thread::sleep_for(std::chrono::microseconds(10 * 1000));
 	}
 
 	return 0;

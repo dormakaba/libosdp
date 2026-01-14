@@ -1,0 +1,85 @@
+{
+    "C_Cpp.files.exclude": {
+        "python/vendor/**": true
+    },
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/utils/include",
+        "${workspaceFolder}/utils/src",
+        "${workspaceFolder}/tests/unit-tests",
+        "${workspaceFolder}/build/include"
+    ],
+    "files.associations": {
+        "**/*.h": "c",
+        "*.in": "c"
+    },
+    "files.watcherExclude": {
+        "python/vendor/**": true
+    },
+    "files.exclude": {
+        "python/vendor/**": true,
+        "python/build/**": true,
+        "**/*.egg-info/**": true
+    },
+    "python.analysis.extraPaths": [
+        "./python"
+    ],
+    "search.exclude": {
+        "python/vendor/**": true
+    },
+    "cSpell.words": [
+        "ACURXSIZE",
+        "BIOMATCH",
+        "BIOMATCHR",
+        "BIOREAD",
+        "BIOREADR",
+        "CAPDET",
+        "CARDREAD",
+        "CHLNG",
+        "CRAUTH",
+        "CRAUTHR",
+        "FTSTAT",
+        "ISTATR",
+        "libosdp",
+        "LSTATR",
+        "MFGERRR",
+        "MFGREP",
+        "MFGSTATR",
+        "osdp",
+        "OSTATR",
+        "PDCAP",
+        "PDID",
+        "PIVDATA",
+        "PIVDATAR",
+        "RMAC",
+        "RMODE",
+        "RSTATR",
+        "scbk",
+        "SCBKD",
+        "TDSET",
+        "UNSUP",
+        "Wiegand"
+    ],
+    "editor.rulers": [
+        80
+    ],
+    "python.testing.pytestArgs": [
+        "tests/pytest"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.errorSquiggles": "enabled",
+    "C_Cpp.autocomplete": "default",
+    "C_Cpp.configurationWarnings": "enabled",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildTask": true,
+    "cmake.configureOnOpen": false,
+    "debug.console.fontSize": 12,
+    "debug.console.fontFamily": "monospace",
+    "terminal.integrated.fontSize": 12,
+    "terminal.integrated.fontFamily": "monospace"
+}

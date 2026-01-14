@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2024-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,7 +9,7 @@
 
 #include "osdp_common.h"
 
-#if defined(CONFIG_OSDP_PACKET_TRACE) || defined(CONFIG_OSDP_DATA_TRACE)
+#if defined(OPT_OSDP_PACKET_TRACE) || defined(OPT_OSDP_DATA_TRACE)
 
 void osdp_packet_capture_init(struct osdp_pd *pd);
 void osdp_packet_capture_finish(struct osdp_pd *pd);

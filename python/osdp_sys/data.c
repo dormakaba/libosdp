@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -44,9 +44,13 @@ static int pyosdp_make_struct_cmd_output(struct osdp_cmd *p, PyObject *dict)
 static int pyosdp_make_dict_cmd_led(PyObject *obj, struct osdp_cmd *cmd)
 {
 	bool is_temporary = false;
+	bool cancel_temporary = false;
 	struct osdp_cmd_led_params *p = &cmd->led.permanent;
 
-	if (cmd->led.temporary.control_code != 0) {
+	if (cmd->led.temporary.control_code == 1 &&
+	    cmd->led.permanent.control_code != 0) {
+		cancel_temporary = true;
+	} else if (cmd->led.temporary.control_code) {
 		p = &cmd->led.temporary;
 		is_temporary = true;
 	}
@@ -66,8 +70,14 @@ static int pyosdp_make_dict_cmd_led(PyObject *obj, struct osdp_cmd *cmd)
 		return -1;
 	if (pyosdp_dict_add_int(obj, "off_count", p->off_count))
 		return -1;
-	if (is_temporary && pyosdp_dict_add_int(obj, "timer_count", p->timer_count))
-		return -1;
+	if (is_temporary) {
+		if (pyosdp_dict_add_int(obj, "timer_count", p->timer_count))
+			return -1;
+	}
+	if (cancel_temporary) {
+		if (pyosdp_dict_add_bool(obj, "cancel_temporary", cancel_temporary))
+			return -1;
+	}
 	return 0;
 }
 
@@ -174,8 +184,6 @@ static int pyosdp_make_dict_cmd_text(PyObject *obj, struct osdp_cmd *cmd)
 	if (pyosdp_dict_add_int(obj, "offset_col", cmd->text.offset_col))
 		return -1;
 	if (pyosdp_dict_add_int(obj, "offset_row", cmd->text.offset_row))
-		return -1;
-	if (pyosdp_dict_add_int(obj, "reader", cmd->text.reader))
 		return -1;
 	if (pyosdp_dict_add_int(obj, "reader", cmd->text.reader))
 		return -1;
@@ -290,8 +298,6 @@ static int pyosdp_make_dict_cmd_mfg(PyObject *obj, struct osdp_cmd *cmd)
 {
 	if (pyosdp_dict_add_int(obj, "vendor_code", cmd->mfg.vendor_code))
 		return -1;
-	if (pyosdp_dict_add_int(obj, "mfg_command", cmd->mfg.command))
-		return -1;
 	if (pyosdp_dict_add_bytes(obj, "data", cmd->mfg.data, cmd->mfg.length))
 		return -1;
 	return 0;
@@ -302,19 +308,15 @@ static int pyosdp_make_struct_cmd_mfg(struct osdp_cmd *p, PyObject *dict)
 	int i, data_length;
 	struct osdp_cmd_mfg *cmd = &p->mfg;
 	uint8_t *data_bytes;
-	int vendor_code, mfg_command;
+	int vendor_code;
 
 	if (pyosdp_dict_get_int(dict, "vendor_code", &vendor_code))
-		return -1;
-
-	if (pyosdp_dict_get_int(dict, "mfg_command", &mfg_command))
 		return -1;
 
 	if (pyosdp_dict_get_bytes(dict, "data", &data_bytes, &data_length))
 		return -1;
 
 	cmd->vendor_code = (uint32_t)vendor_code;
-	cmd->command = mfg_command;
 	cmd->length = data_length;
 	for (i = 0; i < cmd->length; i++)
 		cmd->data[i] = data_bytes[i];
@@ -350,30 +352,18 @@ static int pyosdp_make_dict_cmd_status(PyObject *obj, struct osdp_cmd *cmd)
 {
 	if (pyosdp_dict_add_int(obj, "type", cmd->status.type))
 		return -1;
-	if (pyosdp_dict_add_int(obj, "nr_entries", cmd->status.nr_entries))
-		return -1;
-	if (pyosdp_dict_add_int(obj, "mask", cmd->status.mask))
-		return -1;
 	return 0;
 }
 
 static int pyosdp_make_struct_cmd_status(struct osdp_cmd *p, PyObject *dict)
 {
-	int type, nr_entries, mask;
+	int type;
 	struct osdp_status_report *cmd = &p->status;
 
 	if (pyosdp_dict_get_int(dict, "type", &type))
 		return -1;
 
-	if (pyosdp_dict_get_int(dict, "nr_entries", &nr_entries))
-		return -1;
-
-	if (pyosdp_dict_get_int(dict, "mask", &mask))
-		return -1;
-
 	cmd->type = type;
-	cmd->nr_entries = nr_entries;
-	cmd->mask = mask;
 	return 0;
 }
 
@@ -481,8 +471,6 @@ static int pyosdp_make_dict_event_mfg_reply(PyObject *obj, struct osdp_event *ev
 {
 	if (pyosdp_dict_add_int(obj, "vendor_code", event->mfgrep.vendor_code))
 		return -1;
-	if (pyosdp_dict_add_int(obj, "mfg_command", event->mfgrep.command))
-		return -1;
 	if (pyosdp_dict_add_bytes(obj, "data", event->mfgrep.data, event->mfgrep.length))
 		return -1;
 	return 0;
@@ -498,14 +486,10 @@ static int pyosdp_make_struct_event_mfg_reply(struct osdp_event *p,
 	if (pyosdp_dict_get_int(dict, "vendor_code", &vendor_code))
 		return -1;
 
-	if (pyosdp_dict_get_int(dict, "mfg_command", &command))
-		return -1;
-
 	if (pyosdp_dict_get_bytes(dict, "data", &data_bytes, &data_length))
 		return -1;
 
 	ev->vendor_code = (uint32_t)vendor_code;
-	ev->command = (uint8_t)command;
 	ev->length = data_length;
 	for (i = 0; i < ev->length; i++)
 		ev->data[i] = data_bytes[i];
@@ -516,30 +500,60 @@ static int pyosdp_make_dict_event_status(PyObject *obj, struct osdp_event *event
 {
 	if (pyosdp_dict_add_int(obj, "type", event->status.type))
 		return -1;
-	if (pyosdp_dict_add_int(obj, "nr_entries", event->status.nr_entries))
-		return -1;
-	if (pyosdp_dict_add_int(obj, "mask", event->status.mask))
+	if (pyosdp_dict_add_bytes(obj, "report", event->status.report, event->status.nr_entries))
 		return -1;
 	return 0;
 }
 
 static int pyosdp_make_struct_event_status(struct osdp_event *p, PyObject *dict)
 {
-	int type, nr_entries, mask;
+	int type, nr_entries;
+	uint8_t *report;
 	struct osdp_status_report *ev = &p->status;
 
 	if (pyosdp_dict_get_int(dict, "type", &type))
 		return -1;
 
-	if (pyosdp_dict_get_int(dict, "nr_entries", &nr_entries))
+	if (pyosdp_dict_get_bytes(dict, "report", &report, &nr_entries))
 		return -1;
 
-	if (pyosdp_dict_get_int(dict, "mask", &mask))
+	if (nr_entries > OSDP_STATUS_REPORT_MAX_LEN)
 		return -1;
 
 	ev->type = type;
 	ev->nr_entries = nr_entries;
-	ev->mask = mask;
+	memcpy(ev->report, report, nr_entries);
+	return 0;
+}
+
+static int pyosdp_make_dict_event_notif(PyObject *obj, struct osdp_event *event)
+{
+	if (pyosdp_dict_add_int(obj, "type", event->notif.type))
+		return -1;
+	if (pyosdp_dict_add_int(obj, "arg0", event->notif.arg0))
+		return -1;
+	if (pyosdp_dict_add_int(obj, "arg1", event->notif.arg1))
+		return -1;
+	return 0;
+}
+
+static int pyosdp_make_struct_event_notif(struct osdp_event *p, PyObject *dict)
+{
+	int type, arg0, arg1;
+	struct osdp_event_notification *ev = &p->notif;
+
+	if (pyosdp_dict_get_int(dict, "type", &type))
+		return -1;
+
+	if (pyosdp_dict_get_int(dict, "arg0", &arg0))
+		return -1;
+
+	if (pyosdp_dict_get_int(dict, "arg1", &arg1))
+		return -1;
+
+	ev->type = type;
+	ev->arg0 = arg0;
+	ev->arg1 = arg1;
 	return 0;
 }
 
@@ -568,6 +582,10 @@ static struct {
 		.struct_to_dict = pyosdp_make_dict_cmd_keyset,
 	},
 	[OSDP_CMD_COMSET] = {
+		.dict_to_struct = pyosdp_make_struct_cmd_comset,
+		.struct_to_dict = pyosdp_make_dict_cmd_comset,
+	},
+	[OSDP_CMD_COMSET_DONE] = {
 		.dict_to_struct = pyosdp_make_struct_cmd_comset,
 		.struct_to_dict = pyosdp_make_dict_cmd_comset,
 	},
@@ -605,6 +623,10 @@ static struct {
 		.struct_to_dict = pyosdp_make_dict_event_status,
 		.dict_to_struct = pyosdp_make_struct_event_status,
 	},
+	[OSDP_EVENT_NOTIFICATION] = {
+		.struct_to_dict = pyosdp_make_dict_event_notif,
+		.dict_to_struct = pyosdp_make_struct_event_notif,
+	},
 };
 
 /* --- Exposed Methods --- */
@@ -635,11 +657,15 @@ int pyosdp_make_dict_cmd(PyObject **dict, struct osdp_cmd *cmd)
 	if (obj == NULL)
 		return -1;
 
-	if (pyosdp_dict_add_int(obj, "command", cmd->id))
+	if (pyosdp_dict_add_int(obj, "command", cmd->id)) {
+		Py_DECREF(obj);
 		return -1;
+	}
 
-	if (command_translator[cmd->id].struct_to_dict(obj, cmd))
+	if (command_translator[cmd->id].struct_to_dict(obj, cmd)) {
+		Py_DECREF(obj);
 		return -1;
+	}
 
 	*dict = obj;
 	return 0;
@@ -670,12 +696,34 @@ int pyosdp_make_dict_event(PyObject **dict, struct osdp_event *event)
 	if (obj == NULL)
 		return -1;
 
-	if (pyosdp_dict_add_int(obj, "event", event->type))
+	if (pyosdp_dict_add_int(obj, "event", event->type)) {
+		Py_DECREF(obj);
 		return -1;
+	}
 
-	if (event_translator[event->type].struct_to_dict(obj, event))
+	if (event_translator[event->type].struct_to_dict(obj, event)) {
+		Py_DECREF(obj);
 		return -1;
+	}
 
 	*dict = obj;
 	return 0;
+}
+
+PyObject *pyosdp_make_dict_pd_id(struct osdp_pd_id *pd_id)
+{
+	PyObject *obj = PyDict_New();
+	if (obj == NULL)
+		return NULL;
+
+	if (pyosdp_dict_add_int(obj, "version", pd_id->version) ||
+	    pyosdp_dict_add_int(obj, "model", pd_id->model) ||
+	    pyosdp_dict_add_int(obj, "vendor_code", pd_id->vendor_code) ||
+	    pyosdp_dict_add_int(obj, "serial_number", pd_id->serial_number) ||
+	    pyosdp_dict_add_int(obj, "firmware_version", pd_id->firmware_version)) {
+		Py_DECREF(obj);
+		return NULL;
+	}
+
+	return obj;
 }

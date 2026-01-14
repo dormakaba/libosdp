@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -7,7 +7,7 @@
 import pytest
 
 from osdp import *
-from conftest import make_fifo_pair, cleanup_fifo_pair
+from conftest import make_fifo_pair, cleanup_fifo_pair, wait_for_non_notification_event
 
 pd_cap = PDCapabilities([
     (Capability.OutputControl, 1, 8),
@@ -31,7 +31,7 @@ pd_list = [
 ]
 
 cp = ControlPanel([
-        PDInfo(101, f2, scbk=key, flags=[ LibFlag.EnforceSecure ])
+        PDInfo(101, f2, scbk=key, flags=[ LibFlag.EnforceSecure, LibFlag.EnableNotification ])
     ],
     log_level=LogLevel.Debug
 )
@@ -41,7 +41,9 @@ def setup_test():
     for pd in pd_list:
         pd.start()
     cp.start()
-    cp.online_wait_all()
+    if not cp.online_wait_all(timeout=10):
+        teardown_test()
+        pytest.fail("Failed to bring all PDs online within timeout")
     yield
     teardown_test()
 
@@ -51,35 +53,26 @@ def teardown_test():
         pd.teardown()
     cleanup_fifo_pair("events")
 
+def check_event(event):
+    wait_for_non_notification_event(cp, secure_pd.address, event)
+
 def test_event_keypad():
     event = {
         'event': Event.KeyPress,
         'reader_no': 1,
         'data': bytes([9,1,9,2,6,3,1,7,7,0]),
     }
-    secure_pd.notify_event(event)
-    assert cp.get_event(secure_pd.address) == event
+    secure_pd.submit_event(event)
+    check_event(event)
 
 def test_event_mfg_reply():
     event = {
         'event': Event.ManufacturerReply,
         'vendor_code': 0x153,
-        'mfg_command': 0x10,
-        'data': bytes([9,1,9,2,6,3,1,7,7,0]),
+        'data': bytes([0x10,9,1,9,2,6,3,1,7,7,0]),
     }
-    secure_pd.notify_event(event)
-    assert cp.get_event(secure_pd.address) == event
-
-def test_event_cardread_ascii():
-    event = {
-        'event': Event.CardRead,
-        'reader_no': 1,
-        'direction': 1,
-        'format': CardFormat.ASCII,
-        'data': bytes([9,1,9,2,6,3,1,7,7,0]),
-    }
-    secure_pd.notify_event(event)
-    assert cp.get_event(secure_pd.address) == event
+    secure_pd.submit_event(event)
+    check_event(event)
 
 def test_event_cardread_wiegand():
     event = {
@@ -90,25 +83,23 @@ def test_event_cardread_wiegand():
         'format': CardFormat.Wiegand,
         'data': bytes([0x55, 0xAA]),
     }
-    secure_pd.notify_event(event)
-    assert cp.get_event(secure_pd.address) == event
+    secure_pd.submit_event(event)
+    check_event(event)
 
 def test_event_input():
     event = {
         'event': Event.Status,
         'type': StatusReportType.Input,
-        'nr_entries': 8,
-        'mask': 0xAA, # bit mask of input/output status (upto 32)
+        'report': bytes([1, 0, 1, 0, 1, 0, 1, 0])
     }
-    secure_pd.notify_event(event)
-    assert cp.get_event(secure_pd.address) == event
+    secure_pd.submit_event(event)
+    check_event(event)
 
 def test_event_output():
     event = {
         'event': Event.Status,
         'type': StatusReportType.Output,
-        'nr_entries': 8,
-        'mask': 0x55, # bit mask of input/output status (upto 32)
+        'report': bytes([0, 1, 0, 1, 0, 1, 0, 1])
     }
-    secure_pd.notify_event(event)
-    assert cp.get_event(secure_pd.address) == event
+    secure_pd.submit_event(event)
+    check_event(event)

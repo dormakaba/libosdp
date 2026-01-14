@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,6 +22,9 @@ void pyosdp_add_module_constants(PyObject *module)
 	ADD_CONST("FLAG_ENFORCE_SECURE", OSDP_FLAG_ENFORCE_SECURE);
 	ADD_CONST("FLAG_INSTALL_MODE", OSDP_FLAG_INSTALL_MODE);
 	ADD_CONST("FLAG_IGN_UNSOLICITED", OSDP_FLAG_IGN_UNSOLICITED);
+	ADD_CONST("FLAG_ENABLE_NOTIFICATION", OSDP_FLAG_ENABLE_NOTIFICATION);
+	ADD_CONST("FLAG_CAPTURE_PACKETS", OSDP_FLAG_CAPTURE_PACKETS);
+	ADD_CONST("FLAG_ALLOW_EMPTY_ENCRYPTED_DATA_BLOCK", OSDP_FLAG_ALLOW_EMPTY_ENCRYPTED_DATA_BLOCK);
 
 	ADD_CONST("LOG_EMERG", OSDP_LOG_EMERG);
 	ADD_CONST("LOG_ALERT", OSDP_LOG_ALERT);
@@ -39,6 +42,7 @@ void pyosdp_add_module_constants(PyObject *module)
 	ADD_CONST("CMD_BUZZER", OSDP_CMD_BUZZER);
 	ADD_CONST("CMD_TEXT", OSDP_CMD_TEXT);
 	ADD_CONST("CMD_COMSET", OSDP_CMD_COMSET);
+	ADD_CONST("CMD_COMSET_DONE", OSDP_CMD_COMSET_DONE);
 	ADD_CONST("CMD_KEYSET", OSDP_CMD_KEYSET);
 	ADD_CONST("CMD_MFG", OSDP_CMD_MFG);
 	ADD_CONST("CMD_FILE_TX", OSDP_CMD_FILE_TX);
@@ -49,14 +53,20 @@ void pyosdp_add_module_constants(PyObject *module)
 	ADD_CONST("STATUS_REPORT_OUTPUT", OSDP_STATUS_REPORT_OUTPUT)
 	ADD_CONST("STATUS_REPORT_REMOTE", OSDP_STATUS_REPORT_REMOTE)
 
-	/* For `struct osdp_cmd_file_tx`::flags */
+	/* For `struct osdp_cmd_file_tx::flags` */
 	ADD_CONST("CMD_FILE_TX_FLAG_CANCEL", OSDP_CMD_FILE_TX_FLAG_CANCEL);
+
+	/* For `struct osdp_event_notification::type` */
+	ADD_CONST("EVENT_NOTIFICATION_COMMAND", OSDP_EVENT_NOTIFICATION_COMMAND);
+	ADD_CONST("EVENT_NOTIFICATION_SC_STATUS", OSDP_EVENT_NOTIFICATION_SC_STATUS);
+	ADD_CONST("EVENT_NOTIFICATION_PD_STATUS", OSDP_EVENT_NOTIFICATION_PD_STATUS);
 
 	/* enum osdp_event_type */
 	ADD_CONST("EVENT_CARDREAD", OSDP_EVENT_CARDREAD);
 	ADD_CONST("EVENT_KEYPRESS", OSDP_EVENT_KEYPRESS);
 	ADD_CONST("EVENT_MFGREP", OSDP_EVENT_MFGREP);
 	ADD_CONST("EVENT_STATUS", OSDP_EVENT_STATUS);
+	ADD_CONST("EVENT_NOTIFICATION", OSDP_EVENT_NOTIFICATION);
 
 	/* enum osdp_led_color_e */
 	ADD_CONST("LED_COLOR_NONE", OSDP_LED_COLOR_NONE);
@@ -108,7 +118,7 @@ static PyObject *pyosdp_set_loglevel(void *self, PyObject *args)
 {
 	int log_level = OSDP_LOG_DEBUG;
 
-	if (!PyArg_ParseTuple(args, "I", &log_level)) {
+	if (!PyArg_ParseTuple(args, "i", &log_level)) {
 		PyErr_SetString(PyExc_KeyError, "invalid log level");
 		return NULL;
 	}

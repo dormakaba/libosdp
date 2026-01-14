@@ -1,33 +1,28 @@
 /*
- * Copyright (c) 2019-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2019-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE /* See feature_test_macros(7) */
+#endif
+
 #include <stdarg.h>
 #include <stdlib.h>
-#ifndef CONFIG_DISABLE_PRETTY_LOGGING
+#ifndef OPT_DISABLE_PRETTY_LOGGING
 #endif
 
 #include "osdp_common.h"
 
-uint16_t crc16_itu_t(uint16_t seed, const uint8_t *src, size_t len)
-{
-	for (; len > 0; len--) {
-		seed = (seed >> 8U) | (seed << 8U);
-		seed ^= *src++;
-		seed ^= (seed & 0xffU) >> 4U;
-		seed ^= seed << 12U;
-		seed ^= (seed & 0xffU) << 5U;
-	}
-	return seed;
-}
+#include <utils/crc16.h>
 
 uint16_t osdp_compute_crc16(const uint8_t *buf, size_t len)
 {
 	return crc16_itu_t(0x1D0F, buf, len);
 }
 
-int64_t osdp_millis_now(void)
+__weak int64_t osdp_millis_now(void)
 {
 	return millis_now();
 }
@@ -95,7 +90,7 @@ const char *osdp_reply_name(int reply_id)
 		[REPLY_RSTATR    - REPLY_ACK] = "RSTATR",
 		[REPLY_RAW       - REPLY_ACK] = "RAW",
 		[REPLY_FMT       - REPLY_ACK] = "FMT",
-		[REPLY_KEYPPAD   - REPLY_ACK] = "KEYPPAD",
+		[REPLY_KEYPAD    - REPLY_ACK] = "KEYPAD",
 		[REPLY_COM       - REPLY_ACK] = "COM",
 		[REPLY_BIOREADR  - REPLY_ACK] = "BIOREADR",
 		[REPLY_BIOMATCHR - REPLY_ACK] = "BIOMATCHR",
@@ -104,10 +99,10 @@ const char *osdp_reply_name(int reply_id)
 		[REPLY_FTSTAT    - REPLY_ACK] = "FTSTAT",
 		[REPLY_MFGREP    - REPLY_ACK] = "MFGREP",
 		[REPLY_BUSY      - REPLY_ACK] = "BUSY",
-		[REPLY_PIVDATAR  - REPLY_ACK] = "PIVDATA",
-		[REPLY_CRAUTHR   - REPLY_ACK] = "CRAUTH",
+		[REPLY_PIVDATAR  - REPLY_ACK] = "PIVDATAR",
+		[REPLY_CRAUTHR   - REPLY_ACK] = "CRAUTHR",
 		[REPLY_MFGSTATR  - REPLY_ACK] = "MFGSTATR",
-		[REPLY_MFGERRR   - REPLY_ACK] = "MFGERR",
+		[REPLY_MFGERRR   - REPLY_ACK] = "MFGERRR",
 		[REPLY_XRD       - REPLY_ACK] = "XRD",
 	};
 
@@ -181,7 +176,6 @@ int osdp_rb_pop_buf(struct osdp_rb *p, uint8_t *buf, int max_len)
 
 /* --- Exported Methods --- */
 
-OSDP_EXPORT
 void osdp_logger_init(const char *name, int log_level,
 		      osdp_log_puts_fn_t log_fn)
 {
@@ -189,7 +183,7 @@ void osdp_logger_init(const char *name, int log_level,
 	FILE *file = NULL;
 	int flags = LOGGER_FLAG_NONE;
 
-#ifdef CONFIG_DISABLE_PRETTY_LOGGING
+#ifdef OPT_DISABLE_PRETTY_LOGGING
 	flags |= LOGGER_FLAG_NO_COLORS;
 #endif
 	if (!log_fn)
@@ -199,7 +193,6 @@ void osdp_logger_init(const char *name, int log_level,
 	logger_set_default(&ctx); /* Mark this config as logging default */
 }
 
-OSDP_EXPORT
 void osdp_set_log_callback(osdp_log_callback_fn_t cb)
 {
 	logger_t ctx;
@@ -209,25 +202,22 @@ void osdp_set_log_callback(osdp_log_callback_fn_t cb)
 	logger_set_default(&ctx); /* Mark this config as logging default */
 }
 
-OSDP_EXPORT
 const char *osdp_get_version()
 {
 	return PROJECT_VERSION;
 }
 
-OSDP_EXPORT
 const char *osdp_get_source_info()
 {
-	if (strnlen(GIT_TAG, 8) > 0) {
+	if (strlen(GIT_TAG) > 0) {
 		return GIT_BRANCH " (" GIT_TAG ")";
-	} else if (strnlen(GIT_REV, 8) > 0) {
+	} else if (strlen(GIT_REV) > 0) {
 		return GIT_BRANCH " (" GIT_REV GIT_DIFF ")";
 	} else {
 		return GIT_BRANCH;
 	}
 }
 
-OSDP_EXPORT
 void osdp_get_sc_status_mask(const osdp_t *ctx, uint8_t *bitmask)
 {
 	input_check(ctx);
@@ -250,7 +240,6 @@ void osdp_get_sc_status_mask(const osdp_t *ctx, uint8_t *bitmask)
 	}
 }
 
-OSDP_EXPORT
 void osdp_get_status_mask(const osdp_t *ctx, uint8_t *bitmask)
 {
 	input_check(ctx);

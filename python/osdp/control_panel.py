@@ -1,19 +1,16 @@
 #
-#  Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
-import sys
-import os
-import tempfile
 import osdp_sys
 import time
 import queue
 import threading
-from typing import Callable
+from typing import Callable, Tuple
 
-from .helpers import PDInfo
-from .constants import LibFlag, LogLevel
+from .helpers import PDInfo, PdId
+from .constants import Capability, LibFlag, LogLevel
 
 class ControlPanel():
     def __init__(
@@ -29,8 +26,11 @@ class ControlPanel():
             self.pd_addr.append(pd_info.address)
             info_list.append(pd_info.get())
         self.event_queue = [ queue.Queue() for i in self.pd_addr ]
+        self.user_event_handler = None
         osdp_sys.set_loglevel(log_level)
         self.ctx = osdp_sys.ControlPanel(info_list)
+        # Always use our internal handler to ensure queue functionality
+        self.ctx.set_event_callback(self._internal_event_handler)
         self.set_event_handler(event_handler)
         self.event = None
         self.lock = None
@@ -45,13 +45,22 @@ class ControlPanel():
             time.sleep(0.020) #sleep for 20ms
 
     def set_event_handler(self, handler: Callable[[int, dict], int]):
-        if handler:
-            self.ctx.set_event_callback(handler)
-        else:
-            self.ctx.set_event_callback(self.event_handler)
+        """Set user event handler while maintaining queue functionality"""
+        self.user_event_handler = handler
 
-    def event_handler(self, pd, event) -> int:
+    def _internal_event_handler(self, pd, event) -> int:
+        """Internal handler that manages both queue and user callback"""
+        # Always put event in queue for get_event() compatibility
         self.event_queue[pd].put(event)
+
+        # If user has set a custom handler, call it too
+        if self.user_event_handler:
+            try:
+                return self.user_event_handler(pd, event)
+            except Exception as e:
+                print(f"Error in user event handler: {e}")
+                return -1
+
         return 0
 
     def get_event(self, address, timeout: int=5):
@@ -72,6 +81,29 @@ class ControlPanel():
     def is_online(self, address):
         pd = self.pd_addr.index(address)
         return bool(self.status() & (1 << pd))
+
+    def get_pd_id(self, address: int) -> PdId:
+        pd = self.pd_addr.index(address)
+        self.lock.acquire()
+        pd_id_dict = self.ctx.get_pd_id(pd)
+        self.lock.release()
+        if pd_id_dict:
+            # version: int, model: int, vendor_code: int, serial_number: int, firmware_version: int
+            pd_id = PdId(
+                pd_id_dict['version'],
+                pd_id_dict['model'],
+                pd_id_dict['vendor_code'],
+                pd_id_dict['serial_number'],
+                pd_id_dict['firmware_version']
+            )
+        return pd_id
+
+    def check_capability(self, address: int, cap: Capability) -> Tuple[int, int]:
+        pd = self.pd_addr.index(address)
+        self.lock.acquire()
+        compliance_level, num_items = self.ctx.check_capability(pd, cap)
+        self.lock.release()
+        return (compliance_level, num_items)
 
     def get_num_online(self):
         online = 0
@@ -99,12 +131,17 @@ class ControlPanel():
                 sc_active += 1
         return sc_active
 
-    def send_command(self, address, cmd):
+    def submit_command(self, address, cmd):
         pd = self.pd_addr.index(address)
         self.lock.acquire()
-        ret = self.ctx.send_command(pd, cmd)
+        ret = self.ctx.submit_command(pd, cmd)
         self.lock.release()
         return ret
+
+    def send_command(self, address, cmd):
+        from warnings import warn
+        warn("This method has been renamed to submit_command", DeprecationWarning, 2)
+        return self.submit_command(address, cmd)
 
     def set_flag(self, address, flag: LibFlag):
         pd = self.pd_addr.index(address)
@@ -117,6 +154,27 @@ class ControlPanel():
         pd = self.pd_addr.index(address)
         self.lock.acquire()
         ret = self.ctx.clear_flag(pd, flag)
+        self.lock.release()
+        return ret
+
+    def disable_pd(self, address: int) -> bool:
+        pd = self.pd_addr.index(address)
+        self.lock.acquire()
+        ret = self.ctx.disable_pd(pd)
+        self.lock.release()
+        return ret
+
+    def enable_pd(self, address: int) -> bool:
+        pd = self.pd_addr.index(address)
+        self.lock.acquire()
+        ret = self.ctx.enable_pd(pd)
+        self.lock.release()
+        return ret
+
+    def is_pd_enabled(self, address: int) -> bool:
+        pd = self.pd_addr.index(address)
+        self.lock.acquire()
+        ret = self.ctx.is_pd_enabled(pd)
         self.lock.release()
         return ret
 
@@ -164,12 +222,23 @@ class ControlPanel():
             count += 1
         return res
 
-    def online_wait(self, address, timeout=5):
+    def online_wait(self, address, timeout=8):
         count = 0
         res = False
         while count < timeout * 2:
             time.sleep(0.5)
             if self.is_online(address):
+                res = True
+                break
+            count += 1
+        return res
+
+    def offline_wait(self, address, timeout=8):
+        count = 0
+        res = False
+        while count < timeout * 2:
+            time.sleep(0.5)
+            if not self.is_online(address):
                 res = True
                 break
             count += 1

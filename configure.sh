@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
-#  Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -9,7 +9,7 @@ usage() {
 	cat >&2<<----
 	LibOSDP build configure script
 
-	Configures a bare minimum build environemt for LibOSDP. This is not a
+	Configures a bare minimum build environment for LibOSDP. This is not a
 	replacement for cmake and intended only for those users who don't care
 	about all the bells and whistles and need only the library.
 
@@ -24,6 +24,7 @@ usage() {
 	  --static-pd                  Setup PD single statically
 	  --lib-only                   Only build the library
 	  --cross-compile PREFIX       Use to pass a compiler prefix
+	  --prefix PATH                Install path prefix (default: /usr)
 	  --build-dir                  Build output directory (default: ./build)
 	  -d, --debug                  Enable debug builds
 	  -f, --force                  Use this flags to override some checks
@@ -40,6 +41,7 @@ while [ $# -gt 0 ]; do
 	--data-trace)          DATA_TRACE=1;;
 	--skip-mark)           SKIP_MARK_BYTE=1;;
 	--cross-compile)       CROSS_COMPILE=$2; shift;;
+	--prefix)              PREFIX=$2; shift;;
 	--crypto)              CRYPTO=$2; shift;;
 	--crypto-include-dir)  CRYPTO_INCLUDE_DIR=$2; shift;;
 	--crypto-ld-flags)     CRYPTO_LD_FLAGS=$2; shift;;
@@ -55,7 +57,7 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-mkdir -p ${BUILD_DIR}
+mkdir -p ${BUILD_DIR}/include
 
 if [ -f config.make ] && [ -z "$FORCE" ]; then
 	echo "LibOSDP already configured! Use --force to re-configure"
@@ -63,7 +65,7 @@ if [ -f config.make ] && [ -z "$FORCE" ]; then
 fi
 
 if [[ ("$OSTYPE" == "cygwin") || ("$OSTYPE" == "win32") ]]; then
-	echo "Warning: unsuported platform. Expect issues!"
+	echo "Warning: unsupported platform. Expect issues!"
 fi
 
 ## Toolchains
@@ -79,23 +81,23 @@ fi
 
 ## Build options
 if [[ ! -z "${NO_COLOURS}" ]]; then
-	CCFLAGS+=" -DCONFIG_DISABLE_PRETTY_LOGGING"
+	CCFLAGS+=" -DOPT_DISABLE_PRETTY_LOGGING"
 fi
 
 if [[ ! -z "${PACKET_TRACE}" ]]; then
-	CCFLAGS+=" -DCONFIG_OSDP_PACKET_TRACE"
+	CCFLAGS+=" -DOPT_OSDP_PACKET_TRACE"
 fi
 
 if [[ ! -z "${DATA_TRACE}" ]]; then
-	CCFLAGS+=" -DCONFIG_OSDP_DATA_TRACE"
+	CCFLAGS+=" -DOPT_OSDP_DATA_TRACE"
 fi
 
 if [[ ! -z "${SKIP_MARK_BYTE}" ]]; then
-	CCFLAGS+=" -DCONFIG_OSDP_SKIP_MARK_BYTE"
+	CCFLAGS+=" -DOPT_OSDP_SKIP_MARK_BYTE"
 fi
 
 if [[ ! -z "${STATIC_PD}" ]]; then
-	CCFLAGS+=" -DCONFIG_OSDP_STATIC_PD"
+	CCFLAGS+=" -DOPT_OSDP_STATIC_PD"
 fi
 
 if [[ ! -z "${DEBUG}" ]]; then
@@ -140,10 +142,12 @@ fi
 ## Declare sources
 LIBOSDP_SOURCES+=" src/osdp_common.c src/osdp_phy.c src/osdp_sc.c src/osdp_file.c src/osdp_pd.c"
 LIBOSDP_SOURCES+=" utils/src/list.c utils/src/queue.c utils/src/slab.c utils/src/utils.c"
-LIBOSDP_SOURCES+=" utils/src/disjoint_set.c utils/src/logger.c"
+LIBOSDP_SOURCES+=" utils/src/disjoint_set.c utils/src/logger.c utils/src/crc16.c"
+
+UTILS_SOURCES+=" utils/src/workqueue.c utils/src/circbuf.c utils/src/event.c utils/src/fdutils.c"
 
 if [[ ! -z "${PACKET_TRACE}" ]] || [[ ! -z "${DATA_TRACE}" ]]; then
-	LIBOSDP_SOURCES+=" src/osdp_pcap.c utils/src/pcap_gen.c"
+	LIBOSDP_SOURCES+=" src/osdp_diag.c utils/src/pcap_gen.c"
 fi
 
 if [[ -z "${STATIC_PD}" ]]; then
@@ -153,40 +157,45 @@ else
 	TARGETS="pd_app"
 fi
 
-TEST_SOURCES="tests/unit-tests/test.c tests/unit-tests/test-cp-phy.c"
+TEST_SOURCES="tests/unit-tests/test.c"
+TEST_SOURCES+=" tests/unit-tests/test-cp-phy.c"
 TEST_SOURCES+=" tests/unit-tests/test-commands.c"
-TEST_SOURCES+=" tests/unit-tests/test-cp-fsm.c tests/unit-tests/test-file.c"
-TEST_SOURCES+=" ${LIBOSDP_SOURCES} utils/src/workqueue.c utils/src/circbuf.c"
-TEST_SOURCES+=" utils/src/event.c utils/src/fdutils.c"
+TEST_SOURCES+=" tests/unit-tests/test-events.c"
+TEST_SOURCES+=" tests/unit-tests/test-cp-fsm.c"
+TEST_SOURCES+=" tests/unit-tests/test-file.c"
+TEST_SOURCES+=" tests/unit-tests/test-async-fuzz.c"
+TEST_SOURCES+=" tests/unit-tests/test-hotplug.c"
+TEST_SOURCES+=" ${LIBOSDP_SOURCES} ${UTILS_SOURCES}"
 
 if [[ ! -z "${LIB_ONLY}" ]]; then
 	TARGETS=""
 fi
 
+if [[ -z "${PREFIX}" ]]; then
+	PREFIX="/usr"
+fi
+
+## Generate libosdp.pc
+echo "Generating libosdp.pc"
+sed -e "s|@CMAKE_INSTALL_PREFIX@|${PREFIX}|" \
+    -e "s|@PROJECT_NAME@|${PROJECT_NAME}|" \
+    -e 's|@PROJECT_DESCRIPTION@|Open Supervised Device Protocol (OSDP) Library|' \
+    -e "s|@PROJECT_URL@|https://github.com/goToMain/libosdp|" \
+    -e "s|@PROJECT_VERSION@|${PROJECT_VERSION}|" \
+	misc/libosdp.pc.in > ${BUILD_DIR}/libosdp.pc
+
 ## Generate osdp_config.h
 echo "Generating osdp_config.h"
-CONFIG_OUT=${BUILD_DIR}/osdp_config.h
-cp src/osdp_config.h.in ${CONFIG_OUT}
-sed -ie "s/@PROJECT_VERSION@/${PROJECT_VERSION}/" ${CONFIG_OUT}
-sed -ie "s/@PROJECT_NAME@/${PROJECT_NAME}/" ${CONFIG_OUT}
-sed -ie "s/@GIT_BRANCH@/${GIT_BRANCH}/" ${CONFIG_OUT}
-sed -ie "s/@GIT_REV@/${GIT_REV}/" ${CONFIG_OUT}
-sed -ie "s/@GIT_TAG@/${GIT_TAG}/" ${CONFIG_OUT}
-sed -ie "s/@GIT_DIFF@/${GIT_DIFF}/" ${CONFIG_OUT}
-sed -ie "s|@REPO_ROOT@|${SCRIPT_DIR}|" ${CONFIG_OUT}
+sed -e "s|@PROJECT_VERSION@|${PROJECT_VERSION}|" \
+    -e "s|@PROJECT_NAME@|${PROJECT_NAME}|" \
+    -e "s|@GIT_BRANCH@|${GIT_BRANCH}|" \
+    -e "s|@GIT_REV@|${GIT_REV}|" \
+    -e "s|@GIT_TAG@|${GIT_TAG}|" \
+    -e "s|@GIT_DIFF@|${GIT_DIFF}|" \
+    -e "s|@REPO_ROOT@|${SCRIPT_DIR}|" \
+	src/osdp_config.h.in > ${BUILD_DIR}/include/osdp_config.h
 
-## Generate osdp_exports.h
-echo "Generating osdp_exports.h"
-cat > ${BUILD_DIR}/osdp_export.h <<----
-#ifndef OSDP_EXPORT_H
-#define OSDP_EXPORT_H
-
-#define OSDP_EXPORT
-#define OSDP_NO_EXPORT
-#define OSDP_DEPRECATED_EXPORT
-
-#endif /* OSDP_EXPORT_H */
----
+CCFLAGS+=" -I${BUILD_DIR}/include"
 
 ## Generate Makefile
 echo "Generating config.make"
@@ -199,10 +208,10 @@ CCFLAGS=${CCFLAGS}
 CXXFLAGS=${CXXFLAGS}
 LDFLAGS=${LDFLAGS}
 SRC_LIBOSDP=${LIBOSDP_SOURCES}
-SRC_OSDPCTL=${OSDPCTL_SOURCES}
 SRC_TEST=${TEST_SOURCES}
 TARGETS=${TARGETS}
 BUILD_DIR=$(realpath ${BUILD_DIR})
+PREFIX=${PREFIX}
 ---
 echo
 echo "LibOSDP lean build system configured!"

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+# Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -16,29 +16,24 @@ jobs:
   CmakeBuild:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
-    - name: configure
-      run: |
-        cmake -DCMAKE_BUILD_TYPE=Debug .
-    - name: make
-      run: VERBOSE=1 make
-    - name: pacakge
-      run: |
-        make package
-        make package_source
-        rm -rf ./packages/_CPack_Packages/
-        rm -f ./packages/*.tar.bz2
-    - uses: actions/upload-artifact@v2
+    - name: Configure
+      run: cmake -DCMAKE_BUILD_TYPE=Debug .
+    - name: Build
+      run: cmake --build . --parallel 7 --target all --target cpp_cp_sample --target cpp_pd_sample
+    - name: Package
+      run: cmake --build . --target package  --target package_source
+    - uses: actions/upload-artifact@v4
       with:
-        name: libosdp-ci-binaries.zip
-        path: ./packages/
+        name: libosdp-ubuntu-latest-binaries.zip
+        path: artifacts/
 
   MakeBuild:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
     - name: configure
@@ -47,25 +42,39 @@ jobs:
     - name: make
       run: make V=1
 
+  DocBuild:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y doxygen
+        pip3 install -r doc/requirements.txt
+    - name: Configure
+      run: cmake -DCMAKE_BUILD_TYPE=Debug .
+    - name: Build docs
+      run: cmake --build . --parallel 7 --target html_docs
+
   Test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
-    - name: configure
-      run: cmake .
-    - name: pytest
-      run: |
-        ./tests/pytest/run.sh
-    - name: unit-tests
-      run: |
-        make check-ut
+    - name: Configure
+      run: cmake -DCMAKE_BUILD_TYPE=Debug .
+    - name: Run unit-tests
+      run: cmake --build . --parallel 7 --target check-ut
+    - name: Run pytest
+      run: tests/pytest/run.sh
 
   CheckPatch:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
     - name: ClangFormatCheck
@@ -77,18 +86,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install pypa/build
-        run: |
-          python3 -m pip install build --user
+        run: python3 -m pip install build --user
       - name: Build a binary wheel and a source tarball
-        run: |
-          pushd python
-          python3 -m build
+        run: python3 -m build python
       - name: Store the distribution packages
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: python-package-distributions
           path: python/dist/
+
+  PlatformIO:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        examples:
+          - examples/platformio/cp.ino
+          - examples/platformio/pd.ino
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Build PlatformIO examples
+        run: pio ci --verbose --lib . --board=megaatmega2560 ${{ matrix.examples }}

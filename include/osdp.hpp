@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,7 +15,7 @@
 
 namespace OSDP {
 
-class Common {
+class OSDP_EXPORT Common {
 public:
 	Common() : _ctx(nullptr) {}
 
@@ -59,7 +59,7 @@ protected:
 	osdp_t *_ctx;
 };
 
-class ControlPanel : public Common {
+class OSDP_EXPORT ControlPanel : public Common {
 public:
 	ControlPanel() {}
 
@@ -76,14 +76,30 @@ public:
 		return _ctx != nullptr;
 	}
 
+	bool setup()
+	{
+		return setup(0, nullptr);
+	}
+
+	int add_pd(int num_pd, osdp_pd_info_t *info)
+	{
+		return osdp_cp_add_pd(_ctx, num_pd, info);
+	}
+
 	void refresh()
 	{
 		osdp_cp_refresh(_ctx);
 	}
 
+	[[deprecated]]
 	int send_command(int pd, struct osdp_cmd *cmd)
 	{
-		return osdp_cp_send_command(_ctx, pd, cmd);
+		return osdp_cp_submit_command(_ctx, pd, cmd);
+	}
+
+	int submit_command(int pd, struct osdp_cmd *cmd)
+	{
+		return osdp_cp_submit_command(_ctx, pd, cmd);
 	}
 
 	void set_event_callback(cp_event_callback_t cb, void *arg)
@@ -103,7 +119,7 @@ public:
 
 };
 
-class PeripheralDevice : public Common {
+class OSDP_EXPORT PeripheralDevice : public Common {
 public:
 	PeripheralDevice() {}
 
@@ -130,9 +146,15 @@ public:
 		osdp_pd_set_command_callback(_ctx, cb, args);
 	}
 
+	[[deprecated]]
 	int notify_event(struct osdp_event *event)
 	{
-		return osdp_pd_notify_event(_ctx, event);
+		return osdp_pd_submit_event(_ctx, event);
+	}
+
+	int submit_event(struct osdp_event *event)
+	{
+		return osdp_pd_submit_event(_ctx, event);
 	}
 
 	int flush_events()

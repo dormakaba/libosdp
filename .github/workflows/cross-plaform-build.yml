@@ -1,0 +1,36 @@
+#
+# Copyright (c) 2024-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: Cross Platform Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cross_platform_build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macos-13 is an intel runner, macos-14 is apple silicon
+        os: [ubuntu-latest, macos-13, macos-14, windows-latest]
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Configure
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Debug .
+    - name: Build
+      run: cmake --build build --parallel 8
+    - name: Run unit-tests
+      run: cmake --build build --parallel 8 --target check-ut
+    - name: Pack built binaries
+      run: cmake --build build --target package
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: libosdp-${{ matrix.os }}-binaries
+        path: build/artifacts/

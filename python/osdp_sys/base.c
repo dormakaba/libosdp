@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -47,7 +47,7 @@ int pyosdp_fops_read(void *arg, void *buf, int size, int offset)
 
 	bytes = PyObject_CallObject(self->fops.read_cb, arglist);
 
-	rc = pyosdp_parse_bytes(bytes, (uint8_t **)&rec_bytes, &len);
+	rc = pyosdp_parse_bytes(bytes, (uint8_t **)&rec_bytes, &len, false);
 	if (rc == 0) {
 		if (len <= size)
 			memcpy(buf, rec_bytes, len);
@@ -125,11 +125,15 @@ static PyObject *pyosdp_get_file_tx_status(pyosdp_base_t *self, PyObject *args)
 	if (dict == NULL)
 		Py_RETURN_NONE;
 
-	if (pyosdp_dict_add_int(dict, "size", size))
+	if (pyosdp_dict_add_int(dict, "size", size)) {
+		Py_DECREF(dict);
 		Py_RETURN_NONE;
+	}
 
-	if (pyosdp_dict_add_int(dict, "offset", offset))
+	if (pyosdp_dict_add_int(dict, "offset", offset)) {
+		Py_DECREF(dict);
 		Py_RETURN_NONE;
+	}
 
 	return dict;
 }
@@ -205,7 +209,6 @@ PyObject *pyosdp_get_version(pyosdp_base_t *self, PyObject *args)
 	obj = Py_BuildValue("s", version);
 	if (obj == NULL)
 		return NULL;
-	Py_INCREF(obj);
 	return obj;
 }
 
@@ -218,7 +221,6 @@ PyObject *pyosdp_get_source_info(pyosdp_base_t *self, PyObject *args)
 	obj = Py_BuildValue("s", info);
 	if (obj == NULL)
 		return NULL;
-	Py_INCREF(obj);
 	return obj;
 }
 

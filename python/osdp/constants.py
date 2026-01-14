@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -10,6 +10,9 @@ class LibFlag:
     EnforceSecure = osdp_sys.FLAG_ENFORCE_SECURE
     InstallMode = osdp_sys.FLAG_INSTALL_MODE
     IgnoreUnsolicited = osdp_sys.FLAG_IGN_UNSOLICITED
+    EnableNotification = osdp_sys.FLAG_ENABLE_NOTIFICATION
+    CapturePackets = osdp_sys.FLAG_CAPTURE_PACKETS
+    AllowEmptyEncryptedDataBlock = osdp_sys.FLAG_ALLOW_EMPTY_ENCRYPTED_DATA_BLOCK
 
 class LogLevel:
     Emergency = osdp_sys.LOG_EMERG
@@ -32,6 +35,7 @@ class Command:
     Buzzer = osdp_sys.CMD_BUZZER
     LED = osdp_sys.CMD_LED
     Comset = osdp_sys.CMD_COMSET
+    ComsetDone = osdp_sys.CMD_COMSET_DONE
     Text = osdp_sys.CMD_TEXT
     Manufacturer = osdp_sys.CMD_MFG
     Keyset = osdp_sys.CMD_KEYSET
@@ -51,11 +55,17 @@ class CommandLEDColor:
 class CommandFileTxFlags:
     Cancel = osdp_sys.CMD_FILE_TX_FLAG_CANCEL
 
+class EventNotification:
+    Command = osdp_sys.EVENT_NOTIFICATION_COMMAND
+    SecureChannelStatus = osdp_sys.EVENT_NOTIFICATION_SC_STATUS
+    PeripheralDeviceStatus = osdp_sys.EVENT_NOTIFICATION_PD_STATUS
+
 class Event:
     CardRead = osdp_sys.EVENT_CARDREAD
     KeyPress = osdp_sys.EVENT_KEYPRESS
     ManufacturerReply = osdp_sys.EVENT_MFGREP
     Status = osdp_sys.EVENT_STATUS
+    Notification = osdp_sys.EVENT_NOTIFICATION
 
 class CardFormat:
     Unspecified = osdp_sys.CARD_FMT_RAW_UNSPECIFIED

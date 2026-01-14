@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -52,7 +52,7 @@ void osdp_fill_random(uint8_t *buf, int len)
 
 	for (i = 0; i < len; i++) {
 		rnd = rand();
-		buf[i] = (uint8_t)(((float)rnd) / RAND_MAX * 256);
+		buf[i] = (uint8_t)(((float)rnd) / (float)RAND_MAX * 256);
 	}
 }
 

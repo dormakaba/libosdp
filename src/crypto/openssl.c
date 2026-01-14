@@ -1,22 +1,30 @@
 /*
- * Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdio.h>
 #include <stdint.h>
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
 
+#include <utils/utils.h>
+
 void osdp_crypt_setup()
 {
 }
 
-void osdp_openssl_fatal(void)
+void __noreturn osdp_openssl_fatal(void)
 {
-	ERR_print_errors_fp(stderr);
+	/**
+	 * ERR_print_errors_fp(stderr) is not available when build as a shared
+	 * library in some platforms. Maybe we should call ERR_print_errors_cb()
+	 * in future but for now, we will just fprintf.
+	 */
+	fprintf(stderr, "Openssl fatal error\n");
 	abort();
 }
 

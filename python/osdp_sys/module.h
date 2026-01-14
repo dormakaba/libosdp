@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -56,13 +56,15 @@ int pyosdp_module_add_type(PyObject *module, const char *name,
 
 int pyosdp_parse_int(PyObject *obj, int *res);
 int pyosdp_parse_str(PyObject *obj, char **str);
-int pyosdp_parse_bytes(PyObject *obj, uint8_t **data, int *length);
+int pyosdp_parse_bytes(PyObject *obj, uint8_t **data, int *length, bool allow_empty);
 
 int pyosdp_dict_get_bool(PyObject *dict, const char *key, bool *res);
 int pyosdp_dict_get_int(PyObject *dict, const char *key, int *res);
 int pyosdp_dict_get_str(PyObject *dict, const char *key, char **str);
 int pyosdp_dict_get_bytes(PyObject *dict, const char *key, uint8_t **buf,
 			  int *len);
+int pyosdp_dict_get_bytes_allow_empty(PyObject *dict, const char *key, uint8_t **data,
+			  int *length);
 int pyosdp_dict_get_object(PyObject *dict, const char *key, PyObject **obj);
 
 int pyosdp_dict_add_bool(PyObject *dict, const char *key, bool val);
@@ -91,5 +93,6 @@ int pyosdp_make_struct_cmd(struct osdp_cmd *cmd, PyObject *dict);
 int pyosdp_make_dict_cmd(PyObject **dict, struct osdp_cmd *cmd);
 int pyosdp_make_dict_event(PyObject **dict, struct osdp_event *event);
 int pyosdp_make_struct_event(struct osdp_event *event, PyObject *dict);
+PyObject *pyosdp_make_dict_pd_id(struct osdp_pd_id *pd_id);
 
 #endif /* _PYOSDP_H_ */

@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -11,7 +11,7 @@ import shutil
 import subprocess
 
 project_name = "libosdp"
-project_version = "3.0.2"
+project_version = "3.1.0"
 current_dir = os.path.dirname(os.path.realpath(__file__))
 repo_root = os.path.realpath(os.path.join(current_dir, ".."))
 
@@ -63,9 +63,6 @@ def try_vendor_sources(src_dir, src_files, vendor_dir):
 
     ## generate build headers into ./vendor
 
-    with open("vendor/src/osdp_export.h", "w") as f:
-        f.write("#define OSDP_EXPORT\n")
-
     git = get_git_info()
     shutil.move("vendor/src/osdp_config.h.in", "vendor/src/osdp_config.h")
     configure_file("vendor/src/osdp_config.h", {
@@ -85,6 +82,7 @@ utils_sources = [
     "utils/src/utils.c",
     "utils/src/logger.c",
     "utils/src/disjoint_set.c",
+    "utils/src/crc16.c",
 ]
 
 utils_includes = [
@@ -95,6 +93,7 @@ utils_includes = [
     "utils/include/utils/utils.h",
     "utils/include/utils/logger.h",
     "utils/include/utils/disjoint_set.h",
+    "utils/include/utils/crc16.h",
 ]
 
 lib_sources = [
@@ -110,6 +109,7 @@ lib_sources = [
 
 lib_includes = [
     "include/osdp.h",
+    "include/osdp_export.h",
     "src/osdp_common.h",
     "src/osdp_file.h",
     "src/crypto/tinyaes_src.h",
@@ -132,8 +132,8 @@ other_files = [
     "src/osdp_config.h.in",
 
     # Optional when PACKET_TRACE is enabled
-    "src/osdp_pcap.c",
-    "src/osdp_pcap.h",
+    "src/osdp_diag.c",
+    "src/osdp_diag.h",
     "utils/include/utils/pcap_gen.h",
     "utils/src/pcap_gen.c",
 ]
@@ -147,14 +147,15 @@ try_vendor_sources(
 )
 
 definitions = [
-    # "CONFIG_OSDP_PACKET_TRACE",
-    # "CONFIG_OSDP_DATA_TRACE",
-    # "CONFIG_OSDP_SKIP_MARK_BYTE",
+    "OPT_OSDP_PACKET_TRACE",
+    # "OPT_OSDP_DATA_TRACE",
+    # "OPT_OSDP_SKIP_MARK_BYTE",
 ]
 
-if "CONFIG_OSDP_PACKET_TRACE" in definitions:
+if ("OPT_OSDP_PACKET_TRACE" in definitions or
+    "OPT_OSDP_DATA_TRACE" in definitions):
     source_files += [
-        "src/osdp_pcap.c",
+        "src/osdp_diag.c",
         "utils/src/pcap_gen.c",
     ]
 

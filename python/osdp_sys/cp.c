@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -38,6 +38,9 @@ int pyosdp_cp_event_cb(void *data, int address, struct osdp_event *event)
 {
 	pyosdp_cp_t *self = data;
 	PyObject *arglist, *result, *event_dict;
+
+	if (!self->event_cb)
+		return 0;
 
 	if (pyosdp_make_dict_event(&event_dict, event))
 		return -1;
@@ -86,18 +89,68 @@ static PyObject *pyosdp_cp_refresh(pyosdp_cp_t *self, pyosdp_cp_t *args)
 	Py_RETURN_NONE;
 }
 
-#define pyosdp_cp_send_command_doc                                                   \
+#define pyosdp_cp_get_pd_id_doc                                                \
+	"Get PD_ID info as reported by the PD\n"                               \
+	"\n"                                                                   \
+	"@param pd PD offset number\n"                                         \
+	"\n"                                                                   \
+	"@return dict with PD_ID info\n"
+static PyObject *pyosdp_cp_get_pd_id(pyosdp_cp_t *self, PyObject *args)
+{
+	int pd;
+	struct osdp_pd_id pd_id = {0};
+
+	if (!PyArg_ParseTuple(args, "I", &pd)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid arguments");
+		Py_RETURN_NONE;
+	}
+
+	if (osdp_cp_get_pd_id(self->ctx, pd, &pd_id)) {
+		PyErr_SetString(PyExc_ValueError, "invalid PD offset");
+		Py_RETURN_NONE;
+	}
+
+	return pyosdp_make_dict_pd_id(&pd_id);
+}
+
+#define pyosdp_cp_check_capability_doc                                         \
+	"Get capability associated to a function_code as reported by the PD\n" \
+	"\n"                                                                   \
+	"@param pd PD offset number\n"                                         \
+	"@param capability function code\n"                                    \
+	"\n"                                                                   \
+	"@return (compliance_level, num_items)\n"
+static PyObject *pyosdp_cp_check_capability(pyosdp_cp_t *self, PyObject *args)
+{
+	int pd, function_code;
+	struct osdp_pd_cap cap = {0};
+
+	if (!PyArg_ParseTuple(args, "II", &pd, &function_code)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid arguments");
+		Py_RETURN_NONE;
+	}
+
+	cap.function_code = function_code;
+	if (osdp_cp_get_capability(self->ctx, pd, &cap)) {
+		PyErr_SetString(PyExc_ValueError, "invalid PD offset or function code");
+		Py_RETURN_NONE;
+	}
+
+	return Py_BuildValue("(II)", cap.compliance_level, cap.num_items);
+}
+
+#define pyosdp_cp_submit_command_doc                                                 \
 	"Send an OSDP command to a PD\n"                                             \
 	"\n"                                                                         \
 	"@param pd PD offset number\n"                                               \
 	"@param command A dict of command keys and values. See osdp.h for details\n" \
 	"\n"                                                                         \
 	"@return boolean status of command submission\n"
-static PyObject *pyosdp_cp_send_command(pyosdp_cp_t *self, PyObject *args)
+static PyObject *pyosdp_cp_submit_command(pyosdp_cp_t *self, PyObject *args)
 {
 	int pd, ret;
 	PyObject *cmd_dict;
-	struct osdp_cmd cmd;
+	struct osdp_cmd cmd = {};
 
 	if (!PyArg_ParseTuple(args, "IO!", &pd, &PyDict_Type, &cmd_dict)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid arguments");
@@ -109,13 +162,90 @@ static PyObject *pyosdp_cp_send_command(pyosdp_cp_t *self, PyObject *args)
 		Py_RETURN_FALSE;
 	}
 
-	memset(&cmd, 0, sizeof(struct osdp_cmd));
 	if (pyosdp_make_struct_cmd(&cmd, cmd_dict))
 		Py_RETURN_FALSE;
 
-	ret = osdp_cp_send_command(self->ctx, pd, &cmd);
+	ret = osdp_cp_submit_command(self->ctx, pd, &cmd);
 
 	if (ret == 0)
+		Py_RETURN_TRUE;
+
+	Py_RETURN_FALSE;
+}
+
+#define pyosdp_cp_disable_pd_doc                                             \
+	"Disable a PD (simulate hot-plug removal)\n"                         \
+	"\n"                                                                 \
+	"@param pd PD offset number\n"                                       \
+	"\n"                                                                 \
+	"@return boolean status of disable request\n"
+static PyObject *pyosdp_cp_disable_pd(pyosdp_cp_t *self, PyObject *args)
+{
+	int pd;
+
+	if (!PyArg_ParseTuple(args, "I", &pd)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid arguments");
+		Py_RETURN_FALSE;
+	}
+
+	if (pd < 0 || pd >= self->num_pd) {
+		PyErr_SetString(PyExc_ValueError, "Invalid PD offset");
+		Py_RETURN_FALSE;
+	}
+
+	if (osdp_cp_disable_pd(self->ctx, pd))
+		Py_RETURN_FALSE;
+
+	Py_RETURN_TRUE;
+}
+
+#define pyosdp_cp_enable_pd_doc                                              \
+	"Enable a PD (simulate hot-plug insertion)\n"                        \
+	"\n"                                                                 \
+	"@param pd PD offset number\n"                                       \
+	"\n"                                                                 \
+	"@return boolean status of enable request\n"
+static PyObject *pyosdp_cp_enable_pd(pyosdp_cp_t *self, PyObject *args)
+{
+	int ret, pd;
+
+	if (!PyArg_ParseTuple(args, "I", &pd)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid arguments");
+		Py_RETURN_FALSE;
+	}
+
+	if (pd < 0 || pd >= self->num_pd) {
+		PyErr_SetString(PyExc_ValueError, "Invalid PD offset");
+		Py_RETURN_FALSE;
+	}
+
+	if (osdp_cp_enable_pd(self->ctx, pd))
+		Py_RETURN_FALSE;
+
+	Py_RETURN_TRUE;
+}
+
+#define pyosdp_cp_is_pd_enabled_doc                                          \
+	"Check if a PD is currently enabled\n"                               \
+	"\n"                                                                 \
+	"@param pd PD offset number\n"                                       \
+	"\n"                                                                 \
+	"@return boolean enabled state of the PD\n"
+static PyObject *pyosdp_cp_is_pd_enabled(pyosdp_cp_t *self, PyObject *args)
+{
+	int pd;
+
+	if (!PyArg_ParseTuple(args, "I", &pd)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid arguments");
+		Py_RETURN_FALSE;
+	}
+
+	if (pd < 0 || pd >= self->num_pd) {
+		PyErr_SetString(PyExc_ValueError, "Invalid PD offset");
+		Py_RETURN_FALSE;
+	}
+
+	if (osdp_cp_is_pd_enabled(self->ctx, pd))
 		Py_RETURN_TRUE;
 
 	Py_RETURN_FALSE;
@@ -133,12 +263,10 @@ static PyObject *pyosdp_cp_modify_flag(pyosdp_cp_t *self, PyObject *args, bool d
 		Py_RETURN_FALSE;
 	}
 
-	ret = osdp_cp_modify_flag(self->ctx, pd, (uint32_t)flags, do_set);
+	if (osdp_cp_modify_flag(self->ctx, pd, (uint32_t)flags, do_set))
+		Py_RETURN_FALSE;
 
-	if (ret == 0)
-		Py_RETURN_TRUE;
-
-	Py_RETURN_FALSE;
+	Py_RETURN_TRUE;
 }
 
 #define pyosdp_cp_set_flag_doc \
@@ -190,6 +318,9 @@ static void pyosdp_cp_tp_dealloc(pyosdp_cp_t *self)
 {
 	if (self->ctx)
 		osdp_cp_teardown(self->ctx);
+
+	/* Free allocated name string */
+	free(self->name);
 
 	/* call base class destructor */
 	OSDPBaseType.tp_dealloc((PyObject *)self);
@@ -245,8 +376,10 @@ static int pyosdp_cp_tp_init(pyosdp_cp_t *self, PyObject *args, PyObject *kwargs
 			goto error;
 		}
 
-		pyosdp_dict_get_str(py_info, "name", &self->name);
-		info->name = self->name;
+		if (pyosdp_dict_get_str(py_info, "name", &self->name) == 0)
+			info->name = self->name;
+		else
+			info->name = NULL;
 
 		if (pyosdp_dict_get_int(py_info, "address", &info->address))
 			goto error;
@@ -292,14 +425,13 @@ PyObject *pyosdp_cp_tp_repr(PyObject *self)
 	PyObject *py_string;
 
 	py_string = Py_BuildValue("s", "control panel object");
-	Py_INCREF(py_string);
 
 	return py_string;
 }
 
 static int pyosdp_cp_tp_traverse(pyosdp_cp_t *self, visitproc visit, void *arg)
 {
-	Py_VISIT(self->ctx);
+	Py_VISIT(self->event_cb);
 	return 0;
 }
 
@@ -317,16 +449,26 @@ static PyMethodDef pyosdp_cp_tp_methods[] = {
 	  METH_NOARGS, pyosdp_cp_refresh_doc },
 	{ "set_event_callback", (PyCFunction)pyosdp_cp_set_event_callback,
 	  METH_VARARGS, pyosdp_cp_set_event_callback_doc },
-	{ "send_command", (PyCFunction)pyosdp_cp_send_command,
-	  METH_VARARGS, pyosdp_cp_send_command_doc },
+	{ "submit_command", (PyCFunction)pyosdp_cp_submit_command,
+	  METH_VARARGS, pyosdp_cp_submit_command_doc },
 	{ "status", (PyCFunction)pyosdp_cp_pd_status,
 	  METH_NOARGS, pyosdp_cp_pd_status_doc },
 	{ "sc_status", (PyCFunction)pyosdp_cp_sc_status,
 	  METH_NOARGS, pyosdp_cp_sc_status_doc },
 	{ "set_flag", (PyCFunction)pyosdp_cp_set_flag,
-	  METH_NOARGS, pyosdp_cp_set_flag_doc },
+	  METH_VARARGS, pyosdp_cp_set_flag_doc },
 	{ "clear_flag", (PyCFunction)pyosdp_cp_clear_flag,
-	  METH_NOARGS, pyosdp_cp_clear_flag_doc },
+	  METH_VARARGS, pyosdp_cp_clear_flag_doc },
+	{ "get_pd_id", (PyCFunction)pyosdp_cp_get_pd_id,
+	  METH_VARARGS, pyosdp_cp_get_pd_id_doc },
+	{ "check_capability", (PyCFunction)pyosdp_cp_check_capability,
+	  METH_VARARGS, pyosdp_cp_check_capability_doc },
+	{ "disable_pd", (PyCFunction)pyosdp_cp_disable_pd,
+	  METH_VARARGS, pyosdp_cp_disable_pd_doc },
+	{ "enable_pd", (PyCFunction)pyosdp_cp_enable_pd,
+	  METH_VARARGS, pyosdp_cp_enable_pd_doc },
+	{ "is_pd_enabled", (PyCFunction)pyosdp_cp_is_pd_enabled,
+	  METH_VARARGS, pyosdp_cp_is_pd_enabled_doc },
 	{ NULL, NULL, 0, NULL } /* Sentinel */
 };
 

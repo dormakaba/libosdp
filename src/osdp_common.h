@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2019-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,7 +26,6 @@
 
 #ifndef CONFIG_NO_GENERATED_HEADERS
 #include "osdp_config.h" /* generated */
-#include "osdp_export.h" /* generated */
 #endif
 
 #ifndef NULL
@@ -43,12 +42,21 @@
 #define LOG_ERR(...)   __logger_log(&pd->logger, LOG_ERR,    __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_INF(...)   __logger_log(&pd->logger, LOG_INFO,   __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_WRN(...)   __logger_log(&pd->logger, LOG_WARNING,__FILE__, __LINE__, __VA_ARGS__)
+#define LOG_WRN_ONCE(...) \
+do {\
+  static int warned = 0; \
+  if(!warned) { \
+    __logger_log(&pd->logger, LOG_WARNING,__FILE__, __LINE__, __VA_ARGS__);\
+    warned = 1;\
+  }\
+}while(0)
 #define LOG_NOT(...)   __logger_log(&pd->logger, LOG_NOTICE, __FILE__, __LINE__, __VA_ARGS__)
 #define LOG_DBG(...)   __logger_log(&pd->logger, LOG_DEBUG,  __FILE__, __LINE__, __VA_ARGS__)
 
-#define ISSET_FLAG(p, f) (((p)->flags & (f)) == (f))
-#define SET_FLAG(p, f)	 ((p)->flags |= (f))
-#define CLEAR_FLAG(p, f) ((p)->flags &= ~(f))
+#define ISSET_FLAG(p, f)       (((p)->flags & (f)) == (f))
+#define SET_FLAG(p, f)          ((p)->flags |= (f))
+#define CLEAR_FLAG(p, f)        ((p)->flags &= ~(f))
+#define SET_FLAG_V(p, f, v)     if ((v)) SET_FLAG(p, f); else CLEAR_FLAG(p, f);
 
 #define BYTE_0(x) (uint8_t)(((x) >> 0) & 0xFF)
 #define BYTE_1(x) (uint8_t)(((x) >> 8) & 0xFF)
@@ -107,29 +115,37 @@ union osdp_ephemeral_data {
  *    input_check(ctx);
  *    input_check(ctx, pd);
  */
-#define input_check_init(ctx)                                                  \
-	assert(ctx);                                                           \
-	TO_OSDP(ctx)->_magic = OSDP_CTX_MAGIC;
-#define input_check_osdp_ctx(ctx)                                              \
-	assert(ctx);                                                           \
-	assert(TO_OSDP(ctx)->_magic == OSDP_CTX_MAGIC);
-#define input_check_pd_offset(ctx, pd)                                         \
-	if (pd < 0 || pd >= NUM_PD(ctx)) {                                     \
-		LOG_PRINT("Invalid PD number %d", pd);                         \
-		return -1;                                                     \
-	}
-#define input_check2(_1, _2)                                                   \
-	input_check_osdp_ctx(_1);                                              \
+#define input_check_init(_ctx) do { \
+		struct osdp *__ctx = (struct osdp *)_ctx; \
+		assert(__ctx); \
+		__ctx->_magic = OSDP_CTX_MAGIC; \
+	} while (0)
+#define input_check_osdp_ctx(_ctx) do { \
+		struct osdp *__ctx = (struct osdp *)_ctx; \
+		BUG_ON(__ctx  == NULL); \
+		BUG_ON(__ctx->_magic != OSDP_CTX_MAGIC); \
+	} while (0)
+#define input_check_pd_offset(_ctx, _pd) do { \
+		struct osdp *__ctx = (struct osdp *)_ctx; \
+		int __pd = _pd; \
+		if (__pd < 0 || __pd >= __ctx->_num_pd) { \
+			LOG_PRINT("Invalid PD number %d", __pd); \
+			return -1; \
+		} \
+	} while (0)
+#define input_check2(_1, _2) \
+	input_check_osdp_ctx(_1); \
 	input_check_pd_offset(_1, _2);
-#define input_check1(_1)                                                       \
+#define input_check1(_1) \
 	input_check_osdp_ctx(_1);
 #define get_macro(_1, _2, macro, ...) macro
-#define input_check(...)                                                       \
+#define input_check(...) \
 	get_macro(__VA_ARGS__, input_check2, input_check1)(__VA_ARGS__)
 
 /**
  * @brief OSDP reserved commands
  */
+#define CMD_INVALID      0x00
 #define CMD_POLL	 0x60
 #define CMD_ID		 0x61
 #define CMD_CAP		 0x62
@@ -162,6 +178,7 @@ union osdp_ephemeral_data {
 /**
  * @brief OSDP reserved responses
  */
+#define REPLY_INVALID   0x00
 #define REPLY_ACK	0x40
 #define REPLY_NAK	0x41
 #define REPLY_PDID	0x45
@@ -171,8 +188,8 @@ union osdp_ephemeral_data {
 #define REPLY_OSTATR	0x4A
 #define REPLY_RSTATR	0x4B
 #define REPLY_RAW	0x50
-#define REPLY_FMT	0x51
-#define REPLY_KEYPPAD	0x53
+#define REPLY_FMT	0x51 /* deprecated */
+#define REPLY_KEYPAD	0x53
 #define REPLY_COM	0x54
 #define REPLY_BIOREADR	0x57
 #define REPLY_BIOMATCHR 0x58
@@ -206,17 +223,31 @@ union osdp_ephemeral_data {
 #define PD_FLAG_TAMPER         BIT(1)  /* local tamper status */
 #define PD_FLAG_POWER          BIT(2)  /* local power status */
 #define PD_FLAG_R_TAMPER       BIT(3)  /* remote tamper status */
-#define PD_FLAG_AWAIT_RESP     BIT(4)  /* set after command is sent */
 #define PD_FLAG_SKIP_SEQ_CHECK BIT(5)  /* disable seq checks (debug) */
 #define PD_FLAG_SC_USE_SCBKD   BIT(6)  /* in this SC attempt, use SCBKD */
 #define PD_FLAG_SC_ACTIVE      BIT(7)  /* secure channel is active */
 #define PD_FLAG_PD_MODE        BIT(8)  /* device is setup as PD */
 #define PD_FLAG_CHN_SHARED     BIT(9)  /* PD's channel is shared */
-#define PD_FLAG_PKT_SKIP_MARK  BIT(10) /* CONFIG_OSDP_SKIP_MARK_BYTE */
+#define PD_FLAG_PKT_SKIP_MARK  BIT(10) /* OPT_OSDP_SKIP_MARK_BYTE */
 #define PD_FLAG_PKT_HAS_MARK   BIT(11) /* Packet has mark byte */
-#define PD_FLAG_HAS_SCBK       BIT(12) /* PD has a dedicated SCBK */
-#define PD_FLAG_SC_DISABLED    BIT(13) /* master_key=NULL && scbk=NULL */
-#define PD_FLAG_PKT_BROADCAST  BIT(14) /* this packet was addressed to 0x7F */
+#define PD_FLAG_SC_DISABLED    BIT(12) /* master_key=NULL && scbk=NULL */
+#define PD_FLAG_PKT_BROADCAST  BIT(13) /* this packet was addressed to 0x7F */
+#define PD_FLAG_CP_USE_CRC     BIT(14) /* CP uses CRC-16 instead of checksum */
+
+/* PD Init flags */
+#define PD_FLAG_ENFORCE_SECURE  BIT(24) /* See: OSDP_FLAG_ENFORCE_SECURE */
+#define PD_FLAG_INSTALL_MODE    BIT(25) /* See: OSDP_FLAG_INSTALL_MODE */
+#define PD_FLAG_IGNORE_USR      BIT(26) /* See: OSDP_FLAG_IGNORE_USR */
+#define PD_FLAG_ENABLE_NOTIF    BIT(27) /* See: OSDP_FLAG_ENABLE_NOTIFICATION */
+#define PD_FLAG_CAPTURE_PKT     BIT(28) /* See: OSDP_FLAG_CAPTURE_PACKETS */
+#define PD_FLAG_ALLOW_EMPTY_EDB BIT(29) /* See: OSDP_FLAG_ALLOW_EMPTY_ENCRYPTED_DATA_BLOCK */
+
+/* CP event requests; used with make_request() and check_request() */
+#define CP_REQ_RESTART_SC              0x00000001
+#define CP_REQ_EVENT_SEND              0x00000002
+#define CP_REQ_OFFLINE                 0x00000004
+#define CP_REQ_DISABLE                 0x00000008
+#define CP_REQ_ENABLE                  0x00000010
 
 enum osdp_cp_phy_state_e {
 	OSDP_CP_PHY_STATE_IDLE,
@@ -234,7 +265,9 @@ enum osdp_cp_state_e {
 	OSDP_CP_STATE_SC_SCRYPT,
 	OSDP_CP_STATE_SET_SCBK,
 	OSDP_CP_STATE_ONLINE,
+	OSDP_CP_STATE_PROBE,
 	OSDP_CP_STATE_OFFLINE,
+	OSDP_CP_STATE_DISABLED,
 	OSDP_CP_STATE_SENTINEL
 };
 
@@ -317,12 +350,12 @@ struct osdp_app_data_pool {
 };
 
 struct osdp_pd {
-	const char *name;
+	char name[OSDP_PD_NAME_MAXLEN];
 	struct osdp *osdp_ctx; /* Ref to osdp * to access shared resources */
 	int idx;               /* Offset into osdp->pd[] for this PD */
 	uint32_t flags;        /* Used with: ISSET_FLAG, SET_FLAG, CLEAR_FLAG */
 
-	int baud_rate;         /* Serial baud/bit rate */
+	uint32_t baud_rate;    /* Serial baud/bit rate */
 	int address;           /* PD address */
 	int seq_number;        /* Current packet sequence number */
 	struct osdp_pd_id id;  /* PD ID information (as received from app) */
@@ -332,6 +365,7 @@ struct osdp_pd {
 
 	int state;             /* FSM state (CP mode only) */
 	int phy_state;         /* phy layer FSM state (CP mode only) */
+	int phy_retry_count;   /* command retry counter */
 	uint32_t wait_ms;      /* wait time in MS to retry communication */
 	int64_t tstamp;        /* Last POLL command issued time in ticks */
 	int64_t sc_tstamp;     /* Last received secure reply time in ticks */
@@ -343,8 +377,8 @@ struct osdp_pd {
 	/* Raw bytes received from the serial line for this PD */
 	struct osdp_rb rx_rb;
 	uint8_t packet_buf[OSDP_PACKET_BUF_SIZE];
-	int packet_len;
-	int packet_buf_len;
+	unsigned long packet_len;
+	unsigned long packet_buf_len;
 	uint32_t packet_scan_skip;
 
 	int cmd_id;            /* Currently processing command ID */
@@ -389,7 +423,7 @@ struct osdp {
 
 void osdp_keyset_complete(struct osdp_pd *pd);
 
-/* from osdp_phy.c */
+/* --- from osdp_phy.c --- */
 int osdp_phy_packet_init(struct osdp_pd *p, uint8_t *buf, int max_len);
 int osdp_phy_check_packet(struct osdp_pd *pd);
 int osdp_phy_decode_packet(struct osdp_pd *p, uint8_t **pkt_start);
@@ -398,8 +432,9 @@ int osdp_phy_packet_get_data_offset(struct osdp_pd *p, const uint8_t *buf);
 uint8_t *osdp_phy_packet_get_smb(struct osdp_pd *p, const uint8_t *buf);
 int osdp_phy_send_packet(struct osdp_pd *pd, uint8_t *buf,
 			 int len, int max_len);
+void osdp_phy_progress_sequence(struct osdp_pd *pd);
 
-/* from osdp_common.c */
+/* --- from osdp_common.c --- */
 __weak int64_t osdp_millis_now(void);
 int64_t osdp_millis_since(int64_t last);
 uint16_t osdp_compute_crc16(const uint8_t *buf, size_t len);
@@ -418,7 +453,7 @@ void osdp_decrypt(uint8_t *key, uint8_t *iv, uint8_t *data, int len);
 void osdp_fill_random(uint8_t *buf, int len);
 void osdp_crypt_teardown();
 
-/* from osdp_sc.c */
+/* --- from osdp_sc.c --- */
 void osdp_compute_scbk(struct osdp_pd *pd, uint8_t *master_key, uint8_t *scbk);
 void osdp_compute_session_keys(struct osdp_pd *pd);
 void osdp_compute_cp_cryptogram(struct osdp_pd *pd);
@@ -432,6 +467,111 @@ int osdp_compute_mac(struct osdp_pd *pd, int is_cmd,
 		     const uint8_t *data, int len);
 void osdp_sc_setup(struct osdp_pd *pd);
 void osdp_sc_teardown(struct osdp_pd *pd);
+
+/* --- Little-endian readers --- */
+
+static inline uint16_t bread_u16_le(const uint8_t *buf, int *pos)
+{
+    uint16_t v = buf[(*pos)++];
+    v |= (uint16_t)buf[(*pos)++] << 8;
+    return v;
+}
+
+static inline uint32_t bread_u24_le(const uint8_t *buf, int *pos)
+{
+    uint32_t v = buf[(*pos)++];
+    v |= (uint32_t)buf[(*pos)++] << 8;
+    v |= (uint32_t)buf[(*pos)++] << 16;
+    return v;
+}
+
+static inline uint32_t bread_u32_le(const uint8_t *buf, int *pos)
+{
+    uint32_t v = buf[(*pos)++];
+    v |= (uint32_t)buf[(*pos)++] << 8;
+    v |= (uint32_t)buf[(*pos)++] << 16;
+    v |= (uint32_t)buf[(*pos)++] << 24;
+    return v;
+}
+
+/* --- Little-endian writers --- */
+
+static inline void bwrite_u8(uint8_t val, uint8_t *buf, int *len)
+{
+    buf[(*len)++] = val;
+}
+
+static inline void bwrite_u16_le(uint16_t val, uint8_t *buf, int *len)
+{
+    buf[(*len)++] = BYTE_0(val);
+    buf[(*len)++] = BYTE_1(val);
+}
+
+static inline void bwrite_u24_le(uint32_t val, uint8_t *buf, int *len)
+{
+    buf[(*len)++] = BYTE_0(val);
+    buf[(*len)++] = BYTE_1(val);
+    buf[(*len)++] = BYTE_2(val);
+}
+
+static inline void bwrite_u32_le(uint32_t val, uint8_t *buf, int *len)
+{
+    buf[(*len)++] = BYTE_0(val);
+    buf[(*len)++] = BYTE_1(val);
+    buf[(*len)++] = BYTE_2(val);
+    buf[(*len)++] = BYTE_3(val);
+}
+
+/* --- Big-endian readers --- */
+
+static inline uint16_t bread_u16_be(const uint8_t *buf, int *pos)
+{
+    uint16_t v = (uint16_t)buf[(*pos)++] << 8;
+    v |= buf[(*pos)++];
+    return v;
+}
+
+static inline uint32_t bread_u24_be(const uint8_t *buf, int *pos)
+{
+    uint32_t v = (uint32_t)buf[(*pos)++] << 16;
+    v |= (uint32_t)buf[(*pos)++] << 8;
+    v |= buf[(*pos)++];
+    return v;
+}
+
+static inline uint32_t bread_u32_be(const uint8_t *buf, int *pos)
+{
+    uint32_t v = (uint32_t)buf[(*pos)++] << 24;
+    v |= (uint32_t)buf[(*pos)++] << 16;
+    v |= (uint32_t)buf[(*pos)++] << 8;
+    v |= buf[(*pos)++];
+    return v;
+}
+
+/* --- Big-endian writers --- */
+
+static inline void bwrite_u16_be(uint16_t val, uint8_t *buf, int *len)
+{
+    buf[(*len)++] = BYTE_1(val);
+    buf[(*len)++] = BYTE_0(val);
+}
+
+static inline void bwrite_u24_be(uint32_t val, uint8_t *buf, int *len)
+{
+    buf[(*len)++] = BYTE_2(val);
+    buf[(*len)++] = BYTE_1(val);
+    buf[(*len)++] = BYTE_0(val);
+}
+
+static inline void bwrite_u32_be(uint32_t val, uint8_t *buf, int *len)
+{
+    buf[(*len)++] = BYTE_3(val);
+    buf[(*len)++] = BYTE_2(val);
+    buf[(*len)++] = BYTE_1(val);
+    buf[(*len)++] = BYTE_0(val);
+}
+
+/* --- Other Helpers --- */
 
 static inline int get_tx_buf_size(struct osdp_pd *pd)
 {
@@ -464,9 +604,12 @@ static inline bool is_cp_mode(struct osdp_pd *pd)
 	return !ISSET_FLAG(pd, PD_FLAG_PD_MODE);
 }
 
-static inline bool is_enforce_secure(struct osdp_pd *pd)
-{
-	return ISSET_FLAG(pd, OSDP_FLAG_ENFORCE_SECURE);
+static inline bool is_channel_shared(struct osdp_pd *pd) {
+	return ISSET_FLAG(pd, PD_FLAG_CHN_SHARED);
+}
+
+static inline bool sc_use_scbkd(struct osdp_pd *pd) {
+	return ISSET_FLAG(pd, PD_FLAG_SC_USE_SCBKD);
 }
 
 static inline bool sc_is_capable(struct osdp_pd *pd)
@@ -507,6 +650,43 @@ static inline bool check_request(struct osdp_pd *pd, uint32_t req) {
 
 static inline bool test_request(struct osdp_pd *pd, uint32_t req) {
 	return pd->request & req;
+}
+
+static inline bool is_capture_enabled(struct osdp_pd *pd) {
+	return (ISSET_FLAG(pd, PD_FLAG_CAPTURE_PKT) &&
+	        (IS_ENABLED(OPT_OSDP_PACKET_TRACE) ||
+	         IS_ENABLED(OPT_OSDP_DATA_TRACE)));
+}
+
+static inline bool is_data_trace_enabled(struct osdp_pd *pd) {
+	return (ISSET_FLAG(pd, PD_FLAG_CAPTURE_PKT) &&
+	        IS_ENABLED(OPT_OSDP_DATA_TRACE));
+}
+
+static inline bool is_packet_trace_enabled(struct osdp_pd *pd) {
+	return (ISSET_FLAG(pd, PD_FLAG_CAPTURE_PKT) &&
+	        IS_ENABLED(OPT_OSDP_PACKET_TRACE));
+}
+
+static inline bool sc_allow_empty_encrypted_data_block(struct osdp_pd *pd) {
+	return ISSET_FLAG(pd, PD_FLAG_ALLOW_EMPTY_EDB);
+}
+
+static inline bool is_enforce_secure(struct osdp_pd *pd)
+{
+	return ISSET_FLAG(pd, PD_FLAG_ENFORCE_SECURE);
+}
+
+static inline bool is_notifications_enabled(struct osdp_pd *pd) {
+	return ISSET_FLAG(pd, PD_FLAG_ENABLE_NOTIF);
+}
+
+static inline bool is_ignore_unsolicited_messages(struct osdp_pd *pd) {
+	return ISSET_FLAG(pd, PD_FLAG_IGNORE_USR);
+}
+
+static inline bool is_install_mode(struct osdp_pd *pd) {
+	return ISSET_FLAG(pd, PD_FLAG_INSTALL_MODE);
 }
 
 #endif	/* _OSDP_COMMON_H_ */

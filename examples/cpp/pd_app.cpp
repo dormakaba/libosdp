@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2021-2024 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <iostream>
-#include <unistd.h>
+#include <chrono>
+#include <thread>
 #include <osdp.hpp>
 
 int sample_pd_send_func(void *data, uint8_t *buf, int len)
@@ -13,7 +14,7 @@ int sample_pd_send_func(void *data, uint8_t *buf, int len)
 	(void)(data);
 	(void)(buf);
 
-	// Fill these
+	// TODO (user): send buf of len bytes, over the UART channel.
 
 	return len;
 }
@@ -24,16 +25,8 @@ int sample_pd_recv_func(void *data, uint8_t *buf, int len)
 	(void)(buf);
 	(void)(len);
 
-	// Fill these
+	// TODO (user): read from UART channel into buf, for upto len bytes.
 
-	return 0;
-}
-
-int pd_command_handler(void *self, struct osdp_cmd *cmd)
-{
-	(void)(self);
-
-	std::cout << "PD: CMD: " << cmd->id << std::endl;
 	return 0;
 }
 
@@ -67,10 +60,19 @@ osdp_pd_info_t info_pd = {
 		.id = 0,
 		.recv = sample_pd_recv_func,
 		.send = sample_pd_send_func,
-		.flush = nullptr
+		.flush = nullptr,
+		.close = nullptr,
 	},
 	.scbk = nullptr,
 };
+
+int pd_command_handler(void *data, struct osdp_cmd *cmd)
+{
+	(void)(data);
+
+	std::cout << "PD: CMD: " << cmd->id << std::endl;
+	return 0;
+}
 
 int main()
 {
@@ -86,7 +88,7 @@ int main()
 		pd.refresh();
 
 		// your application code.
-		usleep(1000);
+		std::this_thread::sleep_for(std::chrono::microseconds(10 * 1000));
 	}
 
 	return 0;

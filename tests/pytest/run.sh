@@ -8,16 +8,20 @@ rm -rf __pycache__/
 rm -rf .venv ../../python/{build,dist,libosdp.egg-info,vendor}
 python3 -m venv .venv
 source ./.venv/bin/activate
+pip install --upgrade pip
 
 echo "[-] Installing dependencies.."
 pip install -r requirements.txt
 
 echo "[-] Installing libosdp.."
-pushd ../../python
-python3 setup.py install
-popd
+pip install ../../python
 
 if [[ "$1" == "-n" ]]; then
+	echo "To run tests do:"
+	echo
+	echo "cd ${PYTEST_DIR}"
+	echo "source .venv/bin/activate"
+	echo "pytest -vv --show-capture=all [test_<name>.py]"
 	exit
 fi
 

@@ -1646,9 +1646,6 @@ void osdp_cp_teardown(osdp_t *ctx)
 		}
 	}
 
-	for (int pd = 0; pd < NUM_PD(ctx); pd++) {
-		safe_free(osdp_to_pd(ctx, pd)->file);
-	}
 	safe_free(osdp_to_pd(ctx, 0));
 	safe_free(TO_OSDP(ctx)->channel_lock);
 	safe_free(ctx);

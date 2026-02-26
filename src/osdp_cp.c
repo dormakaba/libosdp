@@ -1536,7 +1536,7 @@ static int cp_add_pd(struct osdp *ctx, int num_pd, const osdp_pd_info_t *info_li
 	for (i = 0; i < num_pd; i++) {
 		info = info_list + i;
 		pd = osdp_to_pd(ctx, i + old_num_pd);
-		pd->idx = i;
+		pd->idx = i + old_num_pd;
 		pd->osdp_ctx = ctx;
 		if (info->name) {
 			strncpy(pd->name, info->name, OSDP_PD_NAME_MAXLEN - 1);

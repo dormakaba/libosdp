@@ -75,6 +75,41 @@ static int cp_cmd_queue_init(struct osdp_pd *pd)
 	return 0;
 }
 
+/**
+ * @brief Relocate the command queue after a memcpy of a PD struct.
+ *
+ * After memcpy, all internal pointers (slab.blob, queue head/tail, node
+ * next/prev) still point into the OLD memory. This function fixes them
+ * by adding the offset between the old and new PD locations, preserving
+ * any queued commands.
+ */
+static void cp_cmd_queue_relocate(struct osdp_pd *new_pd, const struct osdp_pd *old_pd)
+{
+	ptrdiff_t offset = (uint8_t *)new_pd - (const uint8_t *)old_pd;
+	node_t *node;
+
+	/* Fix the slab blob pointer to point into the new struct */
+	new_pd->app_data.slab.blob = new_pd->app_data.slab_blob;
+
+	/* Fix queue list head and tail pointers */
+	if (new_pd->cmd_queue.list.head)
+		new_pd->cmd_queue.list.head =
+			(node_t *)((uint8_t *)new_pd->cmd_queue.list.head + offset);
+	if (new_pd->cmd_queue.list.tail)
+		new_pd->cmd_queue.list.tail =
+			(node_t *)((uint8_t *)new_pd->cmd_queue.list.tail + offset);
+
+	/* Fix each node's next/prev pointers */
+	node = new_pd->cmd_queue.list.head;
+	while (node) {
+		if (node->next)
+			node->next = (node_t *)((uint8_t *)node->next + offset);
+		if (node->prev)
+			node->prev = (node_t *)((uint8_t *)node->prev + offset);
+		node = node->next;
+	}
+}
+
 static struct osdp_cmd *cp_cmd_alloc(struct osdp_pd *pd)
 {
 	struct cp_cmd_node *n = NULL;
@@ -1529,13 +1564,23 @@ static int cp_add_pd(struct osdp *ctx, int num_pd, const osdp_pd_info_t *info_li
 		return -1;
 	}
 
-	ctx->pd = new_pd_array;
-	ctx->_num_pd = old_num_pd + num_pd;
-	memcpy(new_pd_array, old_pd_array, sizeof(struct osdp_pd) * old_num_pd);
+	/* Copy existing PDs to new array (only if there are any) */
+	if (old_num_pd > 0) {
+		memcpy(new_pd_array, old_pd_array, sizeof(struct osdp_pd) * old_num_pd);
+		/*
+		 * After memcpy, the slab allocator pointers in each copied PD still
+		 * point to memory in the old array. Relocate all internal pointers
+		 * to fix them without destroying any queued commands.
+		 */
+		for (i = 0; i < old_num_pd; i++) {
+			cp_cmd_queue_relocate(new_pd_array + i, old_pd_array + i);
+		}
+	}
 
 	for (i = 0; i < num_pd; i++) {
 		info = info_list + i;
-		pd = osdp_to_pd(ctx, i + old_num_pd);
+		/* Work with new_pd_array directly, don't use ctx->pd yet */
+		pd = new_pd_array + old_num_pd + i;
 		pd->idx = i + old_num_pd;
 		pd->osdp_ctx = ctx;
 		if (info->name) {
@@ -1576,6 +1621,13 @@ static int cp_add_pd(struct osdp *ctx, int num_pd, const osdp_pd_info_t *info_li
 		}
 	}
 
+	/* 
+	 * All PDs are now fully initialized. Update ctx to point to the new
+	 * array. From this point on, other threads can see the new PDs.
+	 */
+	ctx->pd = new_pd_array;
+	ctx->_num_pd = old_num_pd + num_pd;
+
 	if (cp_detect_connection_topology(ctx)) {
 		LOG_PRINT("Failed to detect connection topology");
 		goto error;
@@ -1588,9 +1640,23 @@ static int cp_add_pd(struct osdp *ctx, int num_pd, const osdp_pd_info_t *info_li
 	return 0;
 
 error:
-	ctx->pd = old_pd_array;
-	ctx->_num_pd = old_num_pd;
-	free(new_pd_array);
+	/*
+	 * If we reach here after updating ctx->pd, other threads may already
+	 * be using the new array. We cannot safely free it or roll back.
+	 * Note: currently only cp_detect_connection_topology can fail after
+	 * the ctx update, and it doesn't modify the pd array, so the new
+	 * array is still valid for use.
+	 */
+	if (ctx->pd == new_pd_array) {
+		/* Already exposed to other threads, cannot safely roll back */
+		/* Keep new_pd_array, don't free it */
+		if (old_num_pd) {
+			free(old_pd_array);
+		}
+	} else {
+		/* Error happened before ctx update, safe to free new array */
+		free(new_pd_array);
+	}
 	return -1;
 }
 

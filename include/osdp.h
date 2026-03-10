@@ -877,6 +877,7 @@ struct osdp_event_file {
  * @param: pd_nak_code contains the respective osdp_pd_nak_code_e.
  */
 struct osdp_event_nak {
+	uint8_t cmd_id;
 	uint8_t pd_nak_code;
 };
 

@@ -1731,11 +1731,15 @@ int osdp_cp_remove_pd(osdp_t *ctx, int pd_idx)
 		pd->channel.close(pd->channel.data);
 	}
 
-	/* Allocate a new compacted array */
-	new_pd_array = calloc(new_num_pd, sizeof(struct osdp_pd));
-	if (new_pd_array == NULL) {
-		LOG_PRINT("Failed to allocate new osdp_pd[] for remove");
-		return -1;
+	/* Allocate a new compacted array (or NULL if no PDs remain) */
+	if (new_num_pd > 0) {
+		new_pd_array = calloc(new_num_pd, sizeof(struct osdp_pd));
+		if (new_pd_array == NULL) {
+			LOG_PRINT("Failed to allocate new osdp_pd[] for remove");
+			return -1;
+		}
+	} else {
+		new_pd_array = NULL;
 	}
 
 	/* Copy PDs before the removed index */

@@ -56,6 +56,7 @@ void osdp_compute_session_keys(struct osdp_pd *pd)
 	osdp_encrypt(scbk, NULL, pd->sc.s_enc, 16);
 	osdp_encrypt(scbk, NULL, pd->sc.s_mac1, 16);
 	osdp_encrypt(scbk, NULL, pd->sc.s_mac2, 16);
+	osdp_fill_zeros(scbk, sizeof(scbk));
 }
 
 void osdp_compute_cp_cryptogram(struct osdp_pd *pd)
@@ -94,8 +95,10 @@ int osdp_verify_cp_cryptogram(struct osdp_pd *pd)
 	osdp_encrypt(pd->sc.s_enc, NULL, cp_crypto, 16);
 
 	if (osdp_ct_compare(pd->sc.cp_cryptogram, cp_crypto, 16) != 0) {
+		osdp_fill_zeros(cp_crypto, sizeof(cp_crypto));
 		return -1;
 	}
+	osdp_fill_zeros(cp_crypto, sizeof(cp_crypto));
 	return 0;
 }
 
@@ -117,8 +120,10 @@ int osdp_verify_pd_cryptogram(struct osdp_pd *pd)
 	osdp_encrypt(pd->sc.s_enc, NULL, pd_crypto, 16);
 
 	if (osdp_ct_compare(pd->sc.pd_cryptogram, pd_crypto, 16) != 0) {
+		osdp_fill_zeros(pd_crypto, sizeof(pd_crypto));
 		return -1;
 	}
+	osdp_fill_zeros(pd_crypto, sizeof(pd_crypto));
 	return 0;
 }
 
@@ -149,6 +154,7 @@ int osdp_decrypt_data(struct osdp_pd *pd, int is_cmd, uint8_t *data, int length)
 	}
 
 	osdp_decrypt(pd->sc.s_enc, iv, data, length);
+	osdp_fill_zeros(iv, sizeof(iv));
 
 	length--;
 	while (length && data[length] == 0x00) {
@@ -178,6 +184,7 @@ int osdp_encrypt_data(struct osdp_pd *pd, int is_cmd, uint8_t *data, int length)
 	}
 
 	osdp_encrypt(pd->sc.s_enc, iv, data, pad_len);
+	osdp_fill_zeros(iv, sizeof(iv));
 
 	return pad_len;
 }
@@ -212,6 +219,8 @@ int osdp_compute_mac(struct osdp_pd *pd, int is_cmd,
 	/* N-th Block encrypted with SMAC-2 == MAC */
 	osdp_encrypt(pd->sc.s_mac2, iv, buf + pad_len - 16, 16);
 	memcpy(is_cmd ? pd->sc.c_mac : pd->sc.r_mac, buf + pad_len - 16, 16);
+	osdp_fill_zeros(buf, sizeof(buf));
+	osdp_fill_zeros(iv, sizeof(iv));
 
 	return 0;
 }
@@ -238,10 +247,11 @@ void osdp_sc_setup(struct osdp_pd *pd)
 	} else {
 		osdp_fill_random(pd->sc.cp_random, 8);
 	}
+	osdp_fill_zeros(scbk, sizeof(scbk));
 }
 
 void osdp_sc_teardown(struct osdp_pd *pd)
 {
-	ARG_UNUSED(pd);
+	osdp_fill_zeros(&pd->sc, sizeof(struct osdp_secure_channel));
 	osdp_crypt_teardown();
 }

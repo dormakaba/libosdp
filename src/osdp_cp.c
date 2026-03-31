@@ -1795,6 +1795,7 @@ void osdp_cp_teardown(osdp_t *ctx)
 		if (is_capture_enabled(pd)) {
 			osdp_packet_capture_finish(pd);
 		}
+		osdp_fill_zeros(&pd->sc, sizeof(struct osdp_secure_channel));
 		safe_free(pd->file);
 		if (pd->channel.close) {
 			pd->channel.close(pd->channel.data);

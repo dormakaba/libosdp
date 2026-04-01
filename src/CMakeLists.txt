@@ -28,14 +28,8 @@ if (OPT_OSDP_STATIC_PD)
 	list(APPEND LIB_OSDP_DEFINITIONS "-DOPT_OSDP_STATIC_PD")
 endif()
 
-# optionally, find and use OpenSSL or MbedTLS
-find_package(OpenSSL)
-
-if (NOT OpenSSL_FOUND)
-	find_package(MbedTLS)
-else()
-	set(MbedTLS_FOUND FALSE)
-endif()
+# optionally, find and use MbedTLS
+find_package(MbedTLS)
 
 # Generate osdp_config.h in build dir.
 set(REPO_ROOT ${CMAKE_SOURCE_DIR})
@@ -101,9 +95,9 @@ list(APPEND LIB_OSDP_UTILS_SRC
 )
 
 list(APPEND LIB_OSDP_HEADERS
-	${PROJECT_SOURCE_DIR}/include/osdp.h
-	${PROJECT_SOURCE_DIR}/include/osdp.hpp
-	${PROJECT_SOURCE_DIR}/include/osdp_export.h
+	${PROJECT_SOURCE_DIR}/include/libosdp/osdp.h
+	${PROJECT_SOURCE_DIR}/include/libosdp/osdp.hpp
+	${PROJECT_SOURCE_DIR}/include/libosdp/osdp_export.h
 )
 
 # These variables are used in other parts of this projects for rebuilding
@@ -164,7 +158,7 @@ install(
 	EXPORT LibOSDPTargets
 	LIBRARY DESTINATION ${LIBOSDP_LIBRARY_DIR}
 	ARCHIVE DESTINATION ${LIBOSDP_LIBRARY_DIR}
-	PUBLIC_HEADER DESTINATION include/libosdp
+	PUBLIC_HEADER DESTINATION include
 )
 
 endif() # OPT_BUILD_STATIC
@@ -242,7 +236,7 @@ install(
 
 endif() # OPT_BUILD_SHARED
 
-install(FILES ${PROJECT_SOURCE_DIR}/include/osdp_export.h
+install(FILES ${PROJECT_SOURCE_DIR}/include/libosdp/osdp_export.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libosdp
 	COMPONENT headers
 )

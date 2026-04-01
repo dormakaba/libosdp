@@ -5,7 +5,7 @@
  */
 
 #include <Arduino.h>
-#include <osdp.hpp>
+#include <libosdp/osdp.hpp>
 
 OSDP::PeripheralDevice pd;
 

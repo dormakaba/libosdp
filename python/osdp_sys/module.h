@@ -16,7 +16,7 @@
 #include <stdbool.h>
 
 #include <utils/utils.h>
-#include <osdp.h>
+#include <libosdp/osdp.h>
 
 typedef struct {
 	PyObject_HEAD

@@ -6,7 +6,7 @@
 
 #include <unistd.h>
 
-#include <osdp.h>
+#include <libosdp/osdp.h>
 #include "test.h"
 
 extern int (*test_state_update)(struct osdp_pd *);

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
-#include <osdp.hpp>
+#include <libosdp/osdp.hpp>
 
 int sample_pd_send_func(void *data, uint8_t *buf, int len)
 {

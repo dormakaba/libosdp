@@ -22,7 +22,7 @@
 #define USE_CUSTOM_LOGGER
 #include <utils/logger.h>
 
-#include <osdp.h>
+#include <libosdp/osdp.h>
 
 #ifndef CONFIG_NO_GENERATED_HEADERS
 #include "osdp_config.h" /* generated */

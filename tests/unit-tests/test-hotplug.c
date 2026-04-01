@@ -6,7 +6,7 @@
 
 #include <fcntl.h>
 
-#include <osdp.h>
+#include <libosdp/osdp.h>
 #include "test.h"
 
 /* PD enabled/disabled states */

@@ -7,7 +7,7 @@
 #ifndef LIBOSDP_OSDP_HPP_
 #define LIBOSDP_OSDP_HPP_
 
-#include <osdp.h>
+#include <libosdp/osdp.h>
 
 /**
  * @file: LibOSDP classical wrapper. See osdp.h for documentation.

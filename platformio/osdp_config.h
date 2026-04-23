@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2024-2026 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,7 +11,7 @@
  * @brief The following macros are defined defined from the variable in cmake
  * files. All @XXX@ are replaced by the value of XXX as resolved by cmake.
  */
-#define PROJECT_VERSION                "3.1.0"
+#define PROJECT_VERSION                "3.2.1"
 #define PROJECT_NAME                   "libosdp"
 #define GIT_BRANCH                     "platformio"
 #define GIT_REV                        ""

@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2021-2026 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -59,6 +59,12 @@ class EventNotification:
     Command = osdp_sys.EVENT_NOTIFICATION_COMMAND
     SecureChannelStatus = osdp_sys.EVENT_NOTIFICATION_SC_STATUS
     PeripheralDeviceStatus = osdp_sys.EVENT_NOTIFICATION_PD_STATUS
+
+class CompletionStatus:
+    Ok = getattr(osdp_sys, "COMPLETION_OK", 0)
+    Failed = getattr(osdp_sys, "COMPLETION_FAILED", 1)
+    Flushed = getattr(osdp_sys, "COMPLETION_FLUSHED", 2)
+    Aborted = getattr(osdp_sys, "COMPLETION_ABORTED", 3)
 
 class Event:
     CardRead = osdp_sys.EVENT_CARDREAD

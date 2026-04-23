@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2021-2026 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -9,7 +9,7 @@ from .peripheral_device import PeripheralDevice
 from .key_store import KeyStore
 from .constants import (
     LibFlag, Command, CommandLEDColor, CommandFileTxFlags, Event, EventNotification,
-    CardFormat, Capability, LogLevel, StatusReportType
+    CardFormat, Capability, LogLevel, StatusReportType, CompletionStatus
 )
 from .helpers import PdId, PDInfo, PDCapabilities
 from .channel import Channel

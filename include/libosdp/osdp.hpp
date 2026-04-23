@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+ * Copyright (c) 2021-2026 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -107,6 +107,14 @@ public:
 		osdp_cp_set_event_callback(_ctx, cb, arg);
 	}
 
+#ifdef OPT_OSDP_APP_OWNED_QUEUE_DATA
+	void set_command_completion_callback(cp_command_completion_callback_t cb,
+					     void *arg)
+	{
+		osdp_cp_set_command_completion_callback(_ctx, cb, arg);
+	}
+#endif
+
 	int get_pd_id(int pd, struct osdp_pd_id *id)
 	{
 		return osdp_cp_get_pd_id(_ctx, pd, id);
@@ -145,6 +153,14 @@ public:
 	{
 		osdp_pd_set_command_callback(_ctx, cb, args);
 	}
+
+#ifdef OPT_OSDP_APP_OWNED_QUEUE_DATA
+	void set_event_completion_callback(pd_event_completion_callback_t cb,
+					   void *arg)
+	{
+		osdp_pd_set_event_completion_callback(_ctx, cb, arg);
+	}
+#endif
 
 	[[deprecated]]
 	int notify_event(struct osdp_event *event)

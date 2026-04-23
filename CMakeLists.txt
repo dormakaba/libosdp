@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2019-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2019-2026 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -10,14 +10,14 @@ cmake_policy(SET CMP0063 NEW)
 # Generate compile_commands.json for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-project(libosdp VERSION 3.1.0)
+project(libosdp VERSION 3.2.1)
 
 set(PROJECT_AUTHOR       "Siddharth Chandrasekaran")
 set(PROJECT_AUTHOR_EMAIL "sidcha.dev@gmail.com")
 set(PROJECT_YEAR         "2019")
 set(PROJECT_ORG          "goToMain")
 set(PROJECT_URL          "https://github.com/goToMain/libosdp/")
-set(PROJECT_HOMEPAGE     "https://libosdp.sidcha.dev/")
+set(PROJECT_HOMEPAGE     "https://doc.osdp.dev/")
 set(PROJECT_DESCRIPTION  "Open Supervised Device Protocol (OSDP) Library")
 set(PROJECT_LICENSE      "Apache License, Version 2.0 (Apache-2.0)")
 
@@ -27,6 +27,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(OPT_OSDP_PACKET_TRACE "Enable raw packet trace for diagnostics" OFF)
 option(OPT_OSDP_DATA_TRACE "Enable command/reply data buffer tracing" OFF)
 option(OPT_OSDP_SKIP_MARK_BYTE "Don't send the leading mark byte (0xFF)" OFF)
+option(OPT_OSDP_RX_ZERO_COPY "Enable zero-copy RX buffers (requires recv_pkt/release_pkt)" OFF)
+option(OPT_OSDP_APP_OWNED_QUEUE_DATA "Enable app-owned command/event payload mode" OFF)
 option(OPT_DISABLE_PRETTY_LOGGING "Don't colorize log ouputs" OFF)
 option(OPT_BUILD_SANITIZER "Enable different sanitizers during build" OFF)
 option(OPT_BUILD_STATIC "Build static library" ON)

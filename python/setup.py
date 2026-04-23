@@ -1,5 +1,5 @@
 #
-#  Copyright (c) 2020-2025 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
+#  Copyright (c) 2020-2026 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
 #
 #  SPDX-License-Identifier: Apache-2.0
 #
@@ -11,7 +11,7 @@ import shutil
 import subprocess
 
 project_name = "libosdp"
-project_version = "3.1.0"
+project_version = "3.2.1"
 current_dir = os.path.dirname(os.path.realpath(__file__))
 repo_root = os.path.realpath(os.path.join(current_dir, ".."))
 
@@ -23,17 +23,47 @@ def add_prefix_to_path(src_list, path, check_files=True):
                 raise RuntimeError(f"Path '{path}' does not exist")
     return paths
 
-def exec_cmd(cmd):
-    r = subprocess.run(cmd, capture_output = True, text = True)
-    return r.stdout.strip()
+def exec_cmd(cmd, cwd=None):
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+    return r.returncode, r.stdout.strip()
 
 def get_git_info():
-    d = {}
-    d["branch"] = exec_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-    d["tag"] = exec_cmd([ "git", "describe", "--exact-match", "--tags" ])
-    d["diff"] = exec_cmd([ "git", "diff", "--quiet", "--exit-code" ])
-    d["rev"] = exec_cmd(["git", "log", "--pretty=format:%h", "-n", "1"])
-    d["root"] = exec_cmd(["git", "rev-parse", "--show-toplevel"])
+    d = {
+        "branch": "None",
+        "tag": "",
+        "diff": "",
+        "rev": "",
+        "root": repo_root,
+    }
+
+    rc, _ = exec_cmd(["git", "rev-parse", "--is-inside-work-tree"], cwd=repo_root)
+    if rc != 0:
+        return d
+
+    rc, root = exec_cmd(["git", "rev-parse", "--show-toplevel"], cwd=repo_root)
+    if rc == 0 and root:
+        d["root"] = root
+
+    rc, branch = exec_cmd(["git", "symbolic-ref", "--short", "-q", "HEAD"], cwd=repo_root)
+    if rc == 0 and branch:
+        d["branch"] = branch
+    else:
+        d["branch"] = "detached"
+
+    rc, rev = exec_cmd(["git", "describe", "--tags", "--long", "--always", "--abbrev=7"], cwd=repo_root)
+    if rc == 0:
+        d["rev"] = rev
+
+    rc, tag = exec_cmd(["git", "describe", "--exact-match", "--tags", "HEAD"], cwd=repo_root)
+    if rc == 0 and tag:
+        d["tag"] = tag
+
+    rc, status = exec_cmd(["git", "status", "--porcelain", "--untracked-files=normal"], cwd=repo_root)
+    if rc == 0 and status:
+        d["diff"] = "+"
+        if d["tag"]:
+            d["tag"] = d["tag"] + "+"
+
     return d
 
 def configure_file(file, replacements):
@@ -78,7 +108,6 @@ def try_vendor_sources(src_dir, src_files, vendor_dir):
 utils_sources = [
     "utils/src/list.c",
     "utils/src/queue.c",
-    "utils/src/slab.c",
     "utils/src/utils.c",
     "utils/src/logger.c",
     "utils/src/disjoint_set.c",
@@ -138,6 +167,19 @@ other_files = [
     "utils/src/pcap_gen.c",
 ]
 
+definitions = [
+    "OPT_OSDP_PACKET_TRACE",
+    "OPT_OSDP_RX_ZERO_COPY",
+    # "OPT_OSDP_DATA_TRACE",
+    # "OPT_OSDP_SKIP_MARK_BYTE",
+]
+
+app_owned_queue_data = os.getenv("OPT_OSDP_APP_OWNED_QUEUE_DATA", "").lower()
+if app_owned_queue_data in ("0", "false", "no", "off"):
+    utils_sources.append("utils/src/slab.c")
+else:
+    definitions.append("OPT_OSDP_APP_OWNED_QUEUE_DATA")
+
 source_files = utils_sources + lib_sources + osdp_sys_sources
 
 try_vendor_sources(
@@ -145,12 +187,6 @@ try_vendor_sources(
     source_files + utils_includes + lib_includes + osdp_sys_include + other_files,
     "vendor"
 )
-
-definitions = [
-    "OPT_OSDP_PACKET_TRACE",
-    # "OPT_OSDP_DATA_TRACE",
-    # "OPT_OSDP_SKIP_MARK_BYTE",
-]
 
 if ("OPT_OSDP_PACKET_TRACE" in definitions or
     "OPT_OSDP_DATA_TRACE" in definitions):
@@ -171,7 +207,7 @@ include_dirs = [
 
 compile_args = (
     [ "-I" + path for path in include_dirs ] +
-    [ "-D" + define for define in definitions ]
+    [ "-D" + define + "=1" for define in definitions ]
 )
 
 if os.path.exists("README.md"):

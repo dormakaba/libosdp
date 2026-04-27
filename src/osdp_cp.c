@@ -105,6 +105,11 @@ static void cp_cmd_queue_relocate(struct osdp_pd *new_pd, const struct osdp_pd *
 			node->prev = (node_t *)((uint8_t *)node->prev + offset);
 		node = node->next;
 	}
+
+	/* Fix packet_buf if it points to the embedded packet_buf_store */
+	if (new_pd->packet_buf == old_pd->packet_buf_store) {
+		new_pd->packet_buf = new_pd->packet_buf_store;
+	}
 }
 
 #ifndef OPT_OSDP_APP_OWNED_QUEUE_DATA
@@ -1790,6 +1795,11 @@ int osdp_cp_remove_pd(osdp_t *ctx, int pd_idx)
 		osdp_packet_capture_finish(pd);
 	}
 	safe_free(pd->file);
+	if (IS_ENABLED(OPT_OSDP_RX_ZERO_COPY)) {
+		safe_free(pd->rx.pkt);
+	} else {
+		safe_free(pd->rx.rb);
+	}
 	if (pd->channel.close) {
 		pd->channel.close(pd->channel.data);
 	}
@@ -1821,6 +1831,20 @@ int osdp_cp_remove_pd(osdp_t *ctx, int pd_idx)
 		for (i = pd_idx; i < new_num_pd; i++) {
 			cp_cmd_queue_relocate(new_pd_array + i,
 					     old_pd_array + i + 1);
+		}
+	}
+
+	/* Drain any queued commands for the removed PD */
+	{
+		const struct osdp_cmd *cmd;
+		while (cp_cmd_dequeue(pd, &cmd) == 0) {
+			if (IS_ENABLED(OPT_OSDP_APP_OWNED_QUEUE_DATA))
+				cp_complete_cmd(pd, cmd, OSDP_COMPLETION_ABORTED);
+			else
+				cp_cmd_free(pd, cmd);
+		}
+		if (IS_ENABLED(OPT_OSDP_APP_OWNED_QUEUE_DATA)) {
+			cp_complete_cmd(pd, pd->active_cmd, OSDP_COMPLETION_ABORTED);
 		}
 	}
 

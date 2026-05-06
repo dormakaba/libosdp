@@ -491,8 +491,10 @@ static int pd_decode_command(struct osdp_pd *pd, uint8_t *buf, int len)
 				break;
 			}
 		}
-		pd->reply_id = REPLY_ACK;
-		ret = OSDP_PD_ERR_NONE;
+		if (i == len / CMD_OUT_DATA_LEN) {
+			pd->reply_id = REPLY_ACK;
+			ret = OSDP_PD_ERR_NONE;
+		}
 		break;
 	case CMD_LED:
 		if ((len % CMD_LED_DATA_LEN) != 0) {
@@ -523,8 +525,10 @@ static int pd_decode_command(struct osdp_pd *pd, uint8_t *buf, int len)
 				break;
 			}
 		}
-		pd->reply_id = REPLY_ACK;
-		ret = OSDP_PD_ERR_NONE;
+		if (i == len / CMD_LED_DATA_LEN) {
+			pd->reply_id = REPLY_ACK;
+			ret = OSDP_PD_ERR_NONE;
+		}
 		break;
 	case CMD_BUZ:
 		if ((len % CMD_BUZ_DATA_LEN) != 0) {
@@ -545,8 +549,10 @@ static int pd_decode_command(struct osdp_pd *pd, uint8_t *buf, int len)
 				break;
 			}
 		}
-		pd->reply_id = REPLY_ACK;
-		ret = OSDP_PD_ERR_NONE;
+		if (i == len / CMD_BUZ_DATA_LEN) {
+			pd->reply_id = REPLY_ACK;
+			ret = OSDP_PD_ERR_NONE;
+		}
 		break;
 	case CMD_TEXT:
 		if (len < CMD_TEXT_DATA_LEN) {

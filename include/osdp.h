@@ -926,6 +926,31 @@ struct osdp_event_notification {
 	int arg1;                                /**< Additional data member */
 };
 
+/**
+ * @brief File Transfer Status Detail
+ */
+enum osdp_event_file_status_e {
+	OSDP_FILE_STATUS_OK_TO_PROCEED = 0,
+	OSDP_FILE_STATUS_PROCESSED = 1,
+	OSDP_FILE_STATUS_REBOOTING = 2,
+	OSDP_FILE_STATUS_PD_FINISHING = 3,
+	OSDP_FILE_STATUS_ABORT = -1,
+	OSDP_FILE_STATUS_UNRECOGNIZED_CONTENTS = -2,
+	OSDP_FILE_STATUS_MALFORMED_DATA = -3
+};
+
+/**
+ * @brief OSDP Event file transfer status
+ *
+ * The event indicates the status of the file transfer for a file id.
+ *
+ * @param id id of the transferred file
+ * @param status status of the file
+ */
+struct osdp_event_file {
+	int id;
+	enum osdp_event_file_status_e status;
+};
 
 /*
  * @brief OSDP Event NAK
@@ -948,6 +973,7 @@ enum osdp_event_type {
 	OSDP_EVENT_MFGREP,        /**< Manufacturer specific reply event */
 	OSDP_EVENT_STATUS,        /**< Status event */
 	OSDP_EVENT_NOTIFICATION,  /**< LibOSDP notification event */
+	OSDP_EVENT_FILE,          /**< File event */
 	OSDP_EVENT_NAK,			  /**< NAK event */
 	OSDP_EVENT_SENTINEL       /**< Max event value */
 };
@@ -966,6 +992,7 @@ struct osdp_event {
 		struct osdp_event_mfgrep mfgrep;     /**< Manufacturer specific response event struture */
 		struct osdp_status_report status;    /**< Status report event structure */
 		struct osdp_event_notification notif;/**< Notification event structure */
+		struct osdp_event_file file;         /**< File event structure */
 		struct osdp_event_nak nak;           /**< NAK event structure */
 	};
 };

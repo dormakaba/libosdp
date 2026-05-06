@@ -437,6 +437,12 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		}
 		LOG_WRN("PD replied with NAK(%d) for CMD: %s(%02x)",
 			buf[pos], osdp_cmd_name(pd->cmd_id), pd->cmd_id);
+		event.type = OSDP_EVENT_NAK;
+		event.nak.pd_nak_code = buf[pos]; 
+		event.nak.cmd_id = pd->cmd_id;
+		event.nak.pd_nak_code = buf[pos];
+		memcpy(pd->ephemeral_data, &event, sizeof(event));
+		make_request(pd, CP_REQ_EVENT_SEND);
 		ret = OSDP_CP_ERR_NONE;
 		break;
 	case REPLY_PDID:
@@ -1051,9 +1057,13 @@ static bool cp_check_online_response(struct osdp_pd *pd)
 		return true;
 	}
 
-	/* A NAK or no response is always an error */
-	if (pd->reply_id == REPLY_NAK || pd->reply_id == REPLY_INVALID) {
+	/* No response is always an error */
+	if (pd->reply_id == REPLY_INVALID) {
 		return false;
+	}
+	/* Allow NAKs, event will be sent */
+	if (pd->reply_id == REPLY_NAK) {
+		return true;
 	}
 
 	/* Check for known poll responses */

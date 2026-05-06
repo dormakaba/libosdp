@@ -1769,6 +1769,100 @@ int osdp_cp_add_pd(osdp_t *ctx, int num_pd, const osdp_pd_info_t *info)
 	return 0;
 }
 
+int osdp_cp_remove_pd(osdp_t *ctx, int pd_idx)
+{
+	input_check(ctx, pd_idx);
+	int i, old_num_pd, new_num_pd;
+	struct osdp_pd *old_pd_array, *new_pd_array, *pd;
+
+	old_num_pd = NUM_PD(ctx);
+	
+	new_num_pd = old_num_pd - 1;
+	old_pd_array = TO_OSDP(ctx)->pd;
+	pd = osdp_to_pd(ctx, pd_idx);
+
+	/* Clean up the PD being removed */
+	sc_deactivate(pd);
+	if (is_capture_enabled(pd)) {
+		osdp_packet_capture_finish(pd);
+	}
+	safe_free(pd->file);
+	if (IS_ENABLED(OPT_OSDP_RX_ZERO_COPY)) {
+		safe_free(pd->rx.pkt);
+	} else {
+		safe_free(pd->rx.rb);
+	}
+	if (pd->channel.close) {
+		pd->channel.close(pd->channel.data);
+	}
+
+	/* Allocate a new compacted array (or NULL if no PDs remain) */
+	if (new_num_pd > 0) {
+		new_pd_array = calloc(new_num_pd, sizeof(struct osdp_pd));
+		if (new_pd_array == NULL) {
+			LOG_PRINT("Failed to allocate new osdp_pd[] for remove");
+			return -1;
+		}
+	} else {
+		new_pd_array = NULL;
+	}
+
+	/* Copy PDs before the removed index */
+	if (pd_idx > 0) {
+		memcpy(new_pd_array, old_pd_array,
+		       sizeof(struct osdp_pd) * pd_idx);
+		for (i = 0; i < pd_idx; i++) {
+			cp_cmd_queue_relocate(new_pd_array + i, old_pd_array + i);
+		}
+	}
+
+	/* Copy PDs after the removed index */
+	if (pd_idx < new_num_pd) {
+		memcpy(new_pd_array + pd_idx, old_pd_array + pd_idx + 1,
+		       sizeof(struct osdp_pd) * (new_num_pd - pd_idx));
+		for (i = pd_idx; i < new_num_pd; i++) {
+			cp_cmd_queue_relocate(new_pd_array + i,
+					     old_pd_array + i + 1);
+		}
+	}
+
+	/* Drain any queued commands for the removed PD */
+	{
+		const struct osdp_cmd *cmd;
+		while (cp_cmd_dequeue(pd, &cmd) == 0) {
+			if (IS_ENABLED(OPT_OSDP_APP_OWNED_QUEUE_DATA))
+				cp_complete_cmd(pd, cmd, OSDP_COMPLETION_ABORTED);
+			else
+				cp_cmd_free(pd, cmd);
+		}
+		if (IS_ENABLED(OPT_OSDP_APP_OWNED_QUEUE_DATA)) {
+			cp_complete_cmd(pd, pd->active_cmd, OSDP_COMPLETION_ABORTED);
+		}
+	}
+
+	/* Fix up idx and osdp_ctx pointers for all remaining PDs */
+	for (i = 0; i < new_num_pd; i++) {
+		new_pd_array[i].idx = i;
+		new_pd_array[i].osdp_ctx = TO_OSDP(ctx);
+	}
+
+	/* Swap in the new array */
+	TO_OSDP(ctx)->pd = new_pd_array;
+	TO_OSDP(ctx)->_num_pd = new_num_pd;
+
+	if (cp_detect_connection_topology(ctx)) {
+		LOG_PRINT("Failed to detect connection topology after remove");
+		/* Topology detection failed, but PD array is valid */
+	}
+
+	SET_CURRENT_PD(ctx, 0);
+	free(old_pd_array);
+
+	LOG_PRINT("Removed PD at index %d; TotalPDs:%d Channels:%d",
+		  pd_idx, new_num_pd, TO_OSDP(ctx)->num_channels);
+	return 0;
+}
+
 void osdp_cp_teardown(osdp_t *ctx)
 {
 	input_check(ctx);

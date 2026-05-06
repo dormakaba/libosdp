@@ -1195,6 +1195,22 @@ OSDP_EXPORT
 int osdp_cp_add_pd(osdp_t *ctx, int num_pd, const osdp_pd_info_t *info);
 
 /**
+ * @brief Remove a PD from the CP control list by index.
+ *
+ * The PD at the given index is cleaned up (secure channel deactivated, channel
+ * closed, capture finished, file context freed) and removed from the internal
+ * array. Remaining PDs are compacted and their indices updated.
+ *
+ * @param ctx OSDP context
+ * @param pd_idx 0-based index of the PD to remove
+ *
+ * @retval 0 on success
+ * @retval -1 on failure (invalid index, last PD, or allocation error)
+ */
+OSDP_EXPORT
+int osdp_cp_remove_pd(osdp_t *ctx, int pd_idx);
+
+/**
  * @brief Periodic refresh method. Must be called by the application at least
  * once every 50ms to meet OSDP timing requirements.
  *

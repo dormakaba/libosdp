@@ -629,6 +629,7 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		break;
 	case REPLY_RAW:
 		if (len < REPLY_RAW_DATA_LEN) {
+			LOG_ERR("Invalid raw data length %d", len);
 			break;
 		}
 		event.type = OSDP_EVENT_CARDREAD;
@@ -638,6 +639,8 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		event.cardread.direction = 0; /* un-specified */
 		t = (event.cardread.length + 7) / 8; /* len: bytes */
 		if (t != (len - REPLY_RAW_DATA_LEN)) {
+			LOG_ERR("Invalid raw data length %d for payload length %d",
+				len, event.cardread.length);
 			break;
 		}
 		memcpy(event.cardread.data, buf + pos, t);

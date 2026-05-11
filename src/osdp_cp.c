@@ -629,6 +629,7 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		break;
 	case REPLY_RAW:
 		if (len < REPLY_RAW_DATA_LEN) {
+			LOG_ERR("REPLY_RAW failed. %d bytes is too short", len);
 			break;
 		}
 		event.type = OSDP_EVENT_CARDREAD;
@@ -638,6 +639,8 @@ static int cp_decode_response(struct osdp_pd *pd, uint8_t *buf, int len)
 		event.cardread.direction = 0; /* un-specified */
 		t = (event.cardread.length + 7) / 8; /* len: bytes */
 		if (t != (len - REPLY_RAW_DATA_LEN)) {
+			LOG_ERR("REPLY_RAW length mismatch: expected %d, got %d",
+				t, len - REPLY_RAW_DATA_LEN);
 			break;
 		}
 		memcpy(event.cardread.data, buf + pos, t);

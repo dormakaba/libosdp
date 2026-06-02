@@ -6,7 +6,7 @@
 
 #include <fcntl.h>
 
-#include <osdp.h>
+#include <libosdp/osdp.h>
 #include "test.h"
 
 /* Test context for command tests */

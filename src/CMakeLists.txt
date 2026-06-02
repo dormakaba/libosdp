@@ -114,9 +114,9 @@ if (NOT OPT_OSDP_APP_OWNED_QUEUE_DATA)
 endif()
 
 list(APPEND LIB_OSDP_HEADERS
-	${PROJECT_SOURCE_DIR}/include/osdp.h
-	${PROJECT_SOURCE_DIR}/include/osdp.hpp
-	${PROJECT_SOURCE_DIR}/include/osdp_export.h
+	${PROJECT_SOURCE_DIR}/include/libosdp/osdp.h
+	${PROJECT_SOURCE_DIR}/include/libosdp/osdp.hpp
+	${PROJECT_SOURCE_DIR}/include/libosdp/osdp_export.h
 )
 
 # These variables are used in other parts of this projects for rebuilding
@@ -177,7 +177,7 @@ install(
 	EXPORT LibOSDPTargets
 	LIBRARY DESTINATION ${LIBOSDP_LIBRARY_DIR}
 	ARCHIVE DESTINATION ${LIBOSDP_LIBRARY_DIR}
-	PUBLIC_HEADER DESTINATION include/libosdp
+	PUBLIC_HEADER DESTINATION include
 )
 
 endif() # OPT_BUILD_STATIC
@@ -255,7 +255,7 @@ install(
 
 endif() # OPT_BUILD_SHARED
 
-install(FILES ${PROJECT_SOURCE_DIR}/include/osdp_export.h
+install(FILES ${PROJECT_SOURCE_DIR}/include/libosdp/osdp_export.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libosdp
 	COMPONENT headers
 )

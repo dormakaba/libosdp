@@ -9,7 +9,7 @@
 #include <time.h>
 #include <pthread.h>
 
-#include <osdp.h>
+#include <libosdp/osdp.h>
 
 #include "osdp_common.h"
 #include "test.h"

@@ -5,7 +5,7 @@
  */
 
 #include <stdio.h>
-#include <osdp.h>
+#include <libosdp/osdp.h>
 #include <stdint.h>
 
 /**

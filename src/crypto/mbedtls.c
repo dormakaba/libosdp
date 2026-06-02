@@ -12,7 +12,7 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 
-#include <osdp.h>
+#include <libosdp/osdp.h>
 
 mbedtls_aes_context aes_ctx;
 mbedtls_entropy_context entropy_ctx;

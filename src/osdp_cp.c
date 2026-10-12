@@ -1,4 +1,3 @@
-/*
  * Copyright (c) 2019-2026 Siddharth Chandrasekaran <sidcha.dev@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -1541,6 +1540,10 @@ static int cp_detect_connection_topology(struct osdp *ctx)
 
 	if (disjoint_set_make(&set, NUM_PD(ctx)))
 		return -1;
+
+	for (i = 0; i < NUM_PD(ctx); i++) {
+		CLEAR_FLAG(osdp_to_pd(ctx, i), PD_FLAG_CHN_SHARED);
+	}
 
 	for (i = 0; i < NUM_PD(ctx); i++) {
 		pd = osdp_to_pd(ctx, i);

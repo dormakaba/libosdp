@@ -42,11 +42,6 @@ config LIBOSDP_APP_OWNED_QUEUE_DATA
 		commands/events. Applications must keep submitted objects
 		valid until completion callbacks are invoked.
 
-config LIBOSDP_RING_BUFFER
-	bool
-	default y if !LIBOSDP_RX_ZERO_COPY
-	select RING_BUFFER if !LIBOSDP_RX_ZERO_COPY
-
 config LIBOSDP_SKIP_MARK_BYTE
 	bool "Don't send the leading mark byte (0xFF)"
 	default n
